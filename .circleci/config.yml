@@ -4,7 +4,7 @@ jobs:
     docker:
       - image: circleci/node:8.9.0
 
-    working_directory: ~/bm-font
+    working_directory: ~/tslint-report
 
     steps:
       - checkout

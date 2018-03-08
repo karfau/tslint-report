@@ -6,7 +6,8 @@
   "bugs": "https://github.com/karfau/tslint-report/issues",
   "main": "dist/report.js",
   "files": [
-    "dist", "bin"
+    "dist",
+    "bin"
   ],
   "bin": {
     "tslint-report": "bin/tslint-report"
@@ -45,6 +46,5 @@
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#v0.0.8",
     "ts-node": "^5.0.1"
   },
-  "peerDependencies": {
-  }
+  "peerDependencies": {}
 }

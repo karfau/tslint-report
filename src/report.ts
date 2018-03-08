@@ -8,14 +8,13 @@ import {loadConfigurationFromPath} from 'tslint/lib/configuration';
 
 /*
 const DOCS = {
-  tslint: ['CORE', 'https://palantir.github.io/tslint/rules/'],
-  'tslint-eslint-rules': ['ESLINT', 'https://eslint.org/docs/rules/'],
-  'tslint-microsoft-contrib': [
-    'MSC',
+  tslint: 'https://palantir.github.io/tslint/rules/',
+  'tslint-eslint-rules': 'https://eslint.org/docs/rules/',
+  'tslint-microsoft-contrib':
     'https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules'
-  ],
-  'tslint-react': ['REACT', 'https://github.com/palantir/tslint-react#rules'],
-  'bm-tslint-rules': ['BM', 'https://github.com/bettermarks/bm-tslint-rules#rules']
+  ,
+  'tslint-react': 'https://github.com/palantir/tslint-react#rules',
+  'bm-tslint-rules': 'https://github.com/bettermarks/bm-tslint-rules#rules'
 };
 */
 
