@@ -1,0 +1,9 @@
+{
+    "extends": [
+      "bm-tslint-rules"
+    ],
+    "rules": {
+      "curly": false,
+      "no-single-line-block-comment": false
+    }
+}
