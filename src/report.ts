@@ -40,7 +40,7 @@ const findRuleSets = (item: Item): boolean => {
   }
 };
 */
-
+const CWD = process.cwd();
 const findRules = (item: Item): boolean => {
   const ext = Path.extname(item.path);
   if (ext !== '.js') return false;
@@ -49,17 +49,24 @@ const findRules = (item: Item): boolean => {
   if (item.path.indexOf('tslint/lib/language') > -1) return false;
   const fileName = base.substr(0, base.length - ext.length);
   // console.log(item.path, fileName);
-  if (fileName.endsWith('Rule')) return true;
+  if (fileName.endsWith('Rule') && fileName !== 'Rule') return true;
 
   return false;
 };
 type RuleData = Partial<IRuleMetadata> & {ruleName: string, source: string};
-// const ruleSets = walk('.', {nodir: true, filter: findRuleSets}).map(item => item.path);
-const rules = walk('.', {nodir: true, filter: findRules}).map(item => item.path);
+// const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
+const rules = walk(CWD, {nodir: true, filter: findRules}).map(item => item.path);
 const rulesAvailable = rules.reduce(
   (map, path) => {
+    let stripped;
+    try {
+      // tslint:disable-next-line:no-non-null-assertion
+      stripped = /\/(\w+)Rule\..*/.exec(path)![1];
+    } catch (error) {
+      console.log(path, error);
+      return map;
+    }
     // tslint:disable-next-line:no-non-null-assertion
-    const stripped = /\/(\w+)Rule\..*/.exec(path)![1];
     const ruleName = kebabCase(stripped).replace(/-11-/, '11');
 
     const paths = path.split(Path.sep);
@@ -86,7 +93,8 @@ fs.writeJSONSync('available-rules,json', reportAvailable, {spaces: 2});
 
 
 // const tslintJson = findConfiguration('tslint.json').results;
-const rulesFromConfig = loadConfigurationFromPath('./tslint.json', './tslint.json');
+const configFile = Path.join(CWD, 'tslint.json');
+const rulesFromConfig = loadConfigurationFromPath(configFile, configFile);
 const namedRules: IOptions[] = [];
 rulesFromConfig.rules.forEach((option, key) => {
   // console.log(key, JSON.stringify(option));

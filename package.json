@@ -6,10 +6,10 @@
   "bugs": "https://github.com/karfau/tslint-report/issues",
   "main": "dist/report.js",
   "files": [
-    "dist"
+    "dist", "bin"
   ],
   "bin": {
-    "tslint-report": "node dist/report.js"
+    "tslint-report": "bin/tslint-report"
   },
   "engines": {
     "node": ">=8.2.0",
@@ -31,9 +31,11 @@
   "author": "Christian Bewernitz",
   "license": "MIT",
   "dependencies": {
+    "lodash": "^4.17.5",
     "fs-extra": "^5.0.0",
     "klaw-sync": "^3.0.2",
-    "tslint": "^5.8.0"
+    "tslint": "^5.8.0",
+    "typescript": "~2.7.2"
   },
   "devDependencies": {
     "@types/fs-extra": "^5.0.1",
@@ -41,11 +43,8 @@
     "@types/lodash": "^4.14.104",
     "@types/node": "^8.2.0",
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#v0.0.8",
-    "lodash": "^4.17.5",
-    "ts-node": "^5.0.1",
-    "typescript": "~2.7.2"
+    "ts-node": "^5.0.1"
   },
   "peerDependencies": {
-    "lodash": ">=3"
   }
 }

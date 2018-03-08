@@ -39,6 +39,7 @@ const findRuleSets = (item: Item): boolean => {
   }
 };
 */
+const CWD = process.cwd();
 const findRules = (item) => {
     const ext = Path.extname(item.path);
     if (ext !== '.js')
@@ -50,15 +51,23 @@ const findRules = (item) => {
         return false;
     const fileName = base.substr(0, base.length - ext.length);
     // console.log(item.path, fileName);
-    if (fileName.endsWith('Rule'))
+    if (fileName.endsWith('Rule') && fileName !== 'Rule')
         return true;
     return false;
 };
-// const ruleSets = walk('.', {nodir: true, filter: findRuleSets}).map(item => item.path);
-const rules = walk('.', { nodir: true, filter: findRules }).map(item => item.path);
+// const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
+const rules = walk(CWD, { nodir: true, filter: findRules }).map(item => item.path);
 const rulesAvailable = rules.reduce((map, path) => {
+    let stripped;
+    try {
+        // tslint:disable-next-line:no-non-null-assertion
+        stripped = /\/(\w+)Rule\..*/.exec(path)[1];
+    }
+    catch (error) {
+        console.log(path, error);
+        return map;
+    }
     // tslint:disable-next-line:no-non-null-assertion
-    const stripped = /\/(\w+)Rule\..*/.exec(path)[1];
     const ruleName = lodash_1.kebabCase(stripped).replace(/-11-/, '11');
     const paths = path.split(Path.sep);
     const indexOf = paths.indexOf(NODE_MODULES);
@@ -77,7 +86,8 @@ rulesAvailable.forEach((rule, key) => {
 });
 fs.writeJSONSync('available-rules,json', reportAvailable, { spaces: 2 });
 // const tslintJson = findConfiguration('tslint.json').results;
-const rulesFromConfig = configuration_1.loadConfigurationFromPath('./tslint.json', './tslint.json');
+const configFile = Path.join(CWD, 'tslint.json');
+const rulesFromConfig = configuration_1.loadConfigurationFromPath(configFile, configFile);
 const namedRules = [];
 rulesFromConfig.rules.forEach((option, key) => {
     // console.log(key, JSON.stringify(option));
