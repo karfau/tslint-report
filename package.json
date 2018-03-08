@@ -20,7 +20,7 @@
     "preinstall": "npx check-node-version --package",
     "preversion": "npm run build && npm run test",
     "check": "npx npm-check -u --skip-unused",
-    "build": "tsc -p .",
+    "build": "tsc -p tsconfig.json",
     "test": "echo \"NO TESTS YET!\"",
     "tslint": "tslint -c tslint.json --project tsconfig.json -t stylish",
     "start": "ts-node src/report.ts"

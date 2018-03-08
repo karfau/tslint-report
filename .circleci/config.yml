@@ -37,5 +37,10 @@ jobs:
       - run:
           name: run tests
           command: npm test
+
+      - store_artifacts:
+          path: /home/circleci/.npm/_logs
+          destination:  npm-logs
+
       - store_test_results:
           path: junit
