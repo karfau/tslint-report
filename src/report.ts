@@ -1,6 +1,6 @@
 import * as fs from 'fs-extra';
-import * as walk from 'klaw-sync';
-import {Item} from 'klaw-sync';
+import * as glob from 'glob';
+
 import {kebabCase} from 'lodash';
 import * as Path from 'path';
 import {IOptions, IRuleMetadata, loadRules} from 'tslint';
@@ -40,21 +40,12 @@ const findRuleSets = (item: Item): boolean => {
 };
 */
 const CWD = process.cwd();
-const findRules = (item: Item): boolean => {
-  const ext = Path.extname(item.path);
-  if (ext !== '.js') return false;
-  const base = Path.basename(item.path);
-  if (base[0] === '.') return false;
-  if (item.path.indexOf('tslint/lib/language') > -1) return false;
-  const fileName = base.substr(0, base.length - ext.length);
-  // console.log(item.path, fileName);
-  if (fileName.endsWith('Rule') && fileName !== 'Rule') return true;
-
-  return false;
-};
 type RuleData = Partial<IRuleMetadata> & {ruleName: string, source: string};
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
-const rules = walk(CWD, {nodir: true, filter: findRules}).map(item => item.path);
+
+const rules = glob.sync('*Rule.js', {
+  nodir: true, matchBase: true, absolute: true, ignore: '**/tslint/lib/language/**'
+});
 const rulesAvailable = rules.reduce(
   (map, path) => {
     let stripped;

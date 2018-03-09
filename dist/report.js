@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = require("fs-extra");
-const walk = require("klaw-sync");
+const glob = require("glob");
 const lodash_1 = require("lodash");
 const Path = require("path");
 const tslint_1 = require("tslint");
@@ -39,23 +39,10 @@ const findRuleSets = (item: Item): boolean => {
 };
 */
 const CWD = process.cwd();
-const findRules = (item) => {
-    const ext = Path.extname(item.path);
-    if (ext !== '.js')
-        return false;
-    const base = Path.basename(item.path);
-    if (base[0] === '.')
-        return false;
-    if (item.path.indexOf('tslint/lib/language') > -1)
-        return false;
-    const fileName = base.substr(0, base.length - ext.length);
-    // console.log(item.path, fileName);
-    if (fileName.endsWith('Rule') && fileName !== 'Rule')
-        return true;
-    return false;
-};
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
-const rules = walk(CWD, { nodir: true, filter: findRules }).map(item => item.path);
+const rules = glob.sync('*Rule.js', {
+    nodir: true, matchBase: true, absolute: true, ignore: '**/tslint/lib/language/**'
+});
 const rulesAvailable = rules.reduce((map, path) => {
     let stripped;
     try {
