@@ -9,6 +9,12 @@ jobs:
     steps:
       - checkout
 
+      - run:
+          name: report tool versions
+          command: |
+            npm --version
+            node --version
+
       # Download and cache dependencies
       - restore_cache:
           keys:
