@@ -90,5 +90,4 @@ tmp
 doc
 .awcache
 
-/available-rules,json
-/report,json
+/tslint.report.*.json

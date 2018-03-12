@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase} from 'lodash';
+import {kebabCase, sortBy} from 'lodash';
 import * as Path from 'path';
 import {IOptions, IRuleMetadata, loadRules} from 'tslint';
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
@@ -40,13 +40,15 @@ const findRuleSets = (item: Item): boolean => {
 };
 */
 const CWD = process.cwd();
-type RuleData = Partial<IRuleMetadata> & {ruleName: string, source: string};
+type RuleData = Partial<IRuleMetadata> & {ruleName: string, source: string, sameName?: string[]};
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
+const ruleId = ({ruleName, source}: RuleData) => `${source}:${ruleName}`;
 
 const rules = glob.sync('*Rule.js', {
   nodir: true, matchBase: true, absolute: true, ignore: '**/tslint/lib/language/**'
 });
 const rulesAvailable = rules.reduce(
+  // tslint:disable-next-line:cyclomatic-complexity
   (map, path) => {
     let stripped;
     try {
@@ -60,14 +62,40 @@ const rulesAvailable = rules.reduce(
     const ruleName = kebabCase(stripped).replace(/-11-/, '11');
 
     const paths = path.split(Path.sep);
-    const indexOf = paths.indexOf(NODE_MODULES);
+    const indexOf = paths.lastIndexOf(NODE_MODULES);
     const source = indexOf > -1 ? paths[indexOf + 1] : path;
 
     // tslint:disable-next-line:non-literal-require
     const {Rule} = require(path);
-    const data = Rule && Rule.metadata ? Rule.metadata : {ruleName: ruleName};
+    const data: RuleData = Rule && Rule.metadata ? Rule.metadata : {ruleName: ruleName};
+    data.source = source;
 
-    return map.set(ruleName, {...data, source});
+    const existing = map.get(ruleName);
+    if (existing) {
+      // there is another rule with the same name
+      const currentId = ruleId(data);
+      const existingId = ruleId(existing);
+      if (source === 'tslint') {
+        // the current one wins because custom rules can not override tslint rules
+        data.sameName = [...(existing.sameName ? existing.sameName : []), existingId];
+        map.set(existingId, existing);
+        map.set(ruleName, data);
+      } else {
+        // non deterministic which one wins
+        if (existing.source !== 'tslint') {
+          console.warn(
+            `rules with same name '${ruleName}' from different sources`,
+            [existingId, currentId]
+          );
+        }
+        // we keep the one in the map, point to the conflict and only store the current one under ID
+        existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
+        map.set(currentId, data);
+      }
+    } else {
+      map.set(ruleName, data);
+    }
+    return map;
   },
   new Map<string, RuleData>()
 );
@@ -75,11 +103,12 @@ console.log(`found ${rules.length} rules`);
 
 const reportAvailable: any = {};
 // tslint:disable-next-line
-rulesAvailable.forEach((rule, key) => {
+sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
+  const rule = {...rulesAvailable.get(key)!}; // tslint:disable-line:no-non-null-assertion
   delete rule.ruleName;
   reportAvailable[key] = rule;
 });
-fs.writeJSONSync('available-rules,json', reportAvailable, {spaces: 2});
+fs.writeJSONSync('tslint.report.available.json', reportAvailable, {spaces: 2});
 
 
 // const tslintJson = findConfiguration('tslint.json').results;
@@ -93,7 +122,7 @@ rulesFromConfig.rules.forEach((option, key) => {
 const loadedRules = loadRules(namedRules, rulesFromConfig.rulesDirectory);
 const report: any = {};
 
-loadedRules.forEach((rule) => {
+sortBy(loadedRules, 'ruleName').forEach((rule) => {
   const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
   if (!rulesAvailable.has(ruleName)) {
     report[ruleName] = {
@@ -104,16 +133,17 @@ loadedRules.forEach((rule) => {
     return;
   }
   const {
-    deprecationMessage, options
+    deprecationMessage, source, sameName
   } = rulesAvailable.get(ruleName)!; // tslint:disable-line:no-non-null-assertion
 
   report[ruleName] = {
     ...(deprecationMessage && {deprecated: deprecationMessage}),
-    ...(options && {options}),
     ...(ruleArguments && ruleArguments.length && {ruleArguments}),
-    ruleSeverity
+    ruleSeverity,
+    source,
+    ...(source !== 'tslint' && sameName && sameName.length && {sameName})
   };
 });
 
-fs.writeJSONSync('report,json', report, {spaces: 2});
+fs.writeJSONSync('tslint.report.active.json', report, {spaces: 2});
 console.log('active rules:', loadedRules.length);
