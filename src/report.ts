@@ -3,6 +3,7 @@ import * as glob from 'glob';
 
 import {kebabCase, sortBy} from 'lodash';
 import * as Path from 'path';
+import {ExtendedMetadata, DEPRECATED} from './ExtendedMetadata';
 import {IOptions, IRuleMetadata, loadRules} from 'tslint';
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
 
@@ -40,12 +41,21 @@ const findRuleSets = (item: Item): boolean => {
 };
 */
 const CWD = process.cwd();
-type RuleData = Partial<IRuleMetadata> & {ruleName: string, source: string, sameName?: string[]};
+
+type ReportData = {
+  ruleName: string,
+  source: string,
+  sameName?: string[]
+};
+type RuleData = Partial<IRuleMetadata & ExtendedMetadata> & ReportData;
+
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
-const ruleId = ({ruleName, source}: RuleData) => `${source}:${ruleName}`;
+const ruleId = ({ruleName, source}: ReportData) => `${source}:${ruleName}`;
 
 const rules = glob.sync('*Rule.js', {
-  nodir: true, matchBase: true, absolute: true, ignore: '**/tslint/lib/language/**'
+  nodir: true, matchBase: true, absolute: true, ignore: [
+    '**/tslint/lib/language/**', '**/Rule.js', '**/stylelint/**'
+  ]
 });
 const rulesAvailable = rules.reduce(
   // tslint:disable-next-line:cyclomatic-complexity
@@ -99,15 +109,22 @@ const rulesAvailable = rules.reduce(
   },
   new Map<string, RuleData>()
 );
-console.log(`found ${rules.length} rules`);
+console.log(``);
 
 const reportAvailable: any = {};
+const sources = new Set<string>();
+
 // tslint:disable-next-line
 sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
   const rule = {...rulesAvailable.get(key)!}; // tslint:disable-line:no-non-null-assertion
   delete rule.ruleName;
+  sources.add(rule.source);
   reportAvailable[key] = rule;
 });
+console.log(
+  `${rules.length} rules availabel from ${sources.size} sources:\n`,
+  Array.from(sources.values()).join(', ')
+);
 fs.writeJSONSync('tslint.report.available.json', reportAvailable, {spaces: 2});
 
 
@@ -122,8 +139,10 @@ rulesFromConfig.rules.forEach((option, key) => {
 const loadedRules = loadRules(namedRules, rulesFromConfig.rulesDirectory);
 const report: any = {};
 
+// tslint:disable-next-line:cyclomatic-complexity
 sortBy(loadedRules, 'ruleName').forEach((rule) => {
   const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
+
   if (!rulesAvailable.has(ruleName)) {
     report[ruleName] = {
       ruleArguments,
@@ -132,12 +151,19 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
     console.log('Rule not found as available', ruleName);
     return;
   }
+  const ruleData = rulesAvailable.get(ruleName)!; // tslint:disable-line:no-non-null-assertion
   const {
-    deprecationMessage, source, sameName
-  } = rulesAvailable.get(ruleName)!; // tslint:disable-line:no-non-null-assertion
+    deprecationMessage, group, source, sameName
+  } = ruleData;
+
+  // sometimes deprecation message is an empty string, which still means deprecated,
+  // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
+  const deprecated = deprecationMessage !== undefined || (group && group === DEPRECATED);
+  if (deprecated)
+    console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
 
   report[ruleName] = {
-    ...(deprecationMessage && {deprecated: deprecationMessage}),
+    ...(deprecated && {deprecated: deprecationMessage || true}),
     ...(ruleArguments && ruleArguments.length && {ruleArguments}),
     ruleSeverity,
     source,

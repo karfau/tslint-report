@@ -4,6 +4,7 @@ const fs = require("fs-extra");
 const glob = require("glob");
 const lodash_1 = require("lodash");
 const Path = require("path");
+const ExtendedMetadata_1 = require("./ExtendedMetadata");
 const tslint_1 = require("tslint");
 const configuration_1 = require("tslint/lib/configuration");
 /*
@@ -40,10 +41,15 @@ const findRuleSets = (item: Item): boolean => {
 */
 const CWD = process.cwd();
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
+const ruleId = ({ ruleName, source }) => `${source}:${ruleName}`;
 const rules = glob.sync('*Rule.js', {
-    nodir: true, matchBase: true, absolute: true, ignore: '**/tslint/lib/language/**'
+    nodir: true, matchBase: true, absolute: true, ignore: [
+        '**/tslint/lib/language/**', '**/Rule.js', '**/stylelint/**'
+    ]
 });
-const rulesAvailable = rules.reduce((map, path) => {
+const rulesAvailable = rules.reduce(
+// tslint:disable-next-line:cyclomatic-complexity
+(map, path) => {
     let stripped;
     try {
         // tslint:disable-next-line:no-non-null-assertion
@@ -56,21 +62,50 @@ const rulesAvailable = rules.reduce((map, path) => {
     // tslint:disable-next-line:no-non-null-assertion
     const ruleName = lodash_1.kebabCase(stripped).replace(/-11-/, '11');
     const paths = path.split(Path.sep);
-    const indexOf = paths.indexOf(NODE_MODULES);
+    const indexOf = paths.lastIndexOf(NODE_MODULES);
     const source = indexOf > -1 ? paths[indexOf + 1] : path;
     // tslint:disable-next-line:non-literal-require
     const { Rule } = require(path);
     const data = Rule && Rule.metadata ? Rule.metadata : { ruleName: ruleName };
-    return map.set(ruleName, Object.assign({}, data, { source }));
+    data.source = source;
+    const existing = map.get(ruleName);
+    if (existing) {
+        // there is another rule with the same name
+        const currentId = ruleId(data);
+        const existingId = ruleId(existing);
+        if (source === 'tslint') {
+            // the current one wins because custom rules can not override tslint rules
+            data.sameName = [...(existing.sameName ? existing.sameName : []), existingId];
+            map.set(existingId, existing);
+            map.set(ruleName, data);
+        }
+        else {
+            // non deterministic which one wins
+            if (existing.source !== 'tslint') {
+                console.warn(`rules with same name '${ruleName}' from different sources`, [existingId, currentId]);
+            }
+            // we keep the one in the map, point to the conflict and only store the current one under ID
+            existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
+            map.set(currentId, data);
+        }
+    }
+    else {
+        map.set(ruleName, data);
+    }
+    return map;
 }, new Map());
-console.log(`found ${rules.length} rules`);
+console.log(``);
 const reportAvailable = {};
+const sources = new Set();
 // tslint:disable-next-line
-rulesAvailable.forEach((rule, key) => {
+lodash_1.sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
+    const rule = Object.assign({}, rulesAvailable.get(key)); // tslint:disable-line:no-non-null-assertion
     delete rule.ruleName;
+    sources.add(rule.source);
     reportAvailable[key] = rule;
 });
-fs.writeJSONSync('available-rules,json', reportAvailable, { spaces: 2 });
+console.log(`${rules.length} rules availabel from ${sources.size} sources:\n`, Array.from(sources.values()).join(', '));
+fs.writeJSONSync('tslint.report.available.json', reportAvailable, { spaces: 2 });
 // const tslintJson = findConfiguration('tslint.json').results;
 const configFile = Path.join(CWD, 'tslint.json');
 const rulesFromConfig = configuration_1.loadConfigurationFromPath(configFile, configFile);
@@ -81,7 +116,8 @@ rulesFromConfig.rules.forEach((option, key) => {
 });
 const loadedRules = tslint_1.loadRules(namedRules, rulesFromConfig.rulesDirectory);
 const report = {};
-loadedRules.forEach((rule) => {
+// tslint:disable-next-line:cyclomatic-complexity
+lodash_1.sortBy(loadedRules, 'ruleName').forEach((rule) => {
     const { ruleName, ruleArguments, ruleSeverity } = rule.getOptions();
     if (!rulesAvailable.has(ruleName)) {
         report[ruleName] = {
@@ -91,8 +127,15 @@ loadedRules.forEach((rule) => {
         console.log('Rule not found as available', ruleName);
         return;
     }
-    const { deprecationMessage, options } = rulesAvailable.get(ruleName); // tslint:disable-line:no-non-null-assertion
-    report[ruleName] = Object.assign({}, (deprecationMessage && { deprecated: deprecationMessage }), (options && { options }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity });
+    const ruleData = rulesAvailable.get(ruleName); // tslint:disable-line:no-non-null-assertion
+    const { deprecationMessage, group, source, sameName } = ruleData;
+    // sometimes deprecation message is an empty string, which still means deprecated,
+    // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
+    const deprecated = deprecationMessage !== undefined || (group && group === ExtendedMetadata_1.DEPRECATED);
+    if (deprecated)
+        console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
+    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
+        source }, (source !== 'tslint' && sameName && sameName.length && { sameName }));
 });
-fs.writeJSONSync('report,json', report, { spaces: 2 });
+fs.writeJSONSync('tslint.report.active.json', report, { spaces: 2 });
 console.log('active rules:', loadedRules.length);
