@@ -1,4 +1,13 @@
 "use strict";
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) if (e.indexOf(p[i]) < 0)
+            t[p[i]] = s[p[i]];
+    return t;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = require("fs-extra");
 const glob = require("glob");
@@ -6,6 +15,7 @@ const lodash_1 = require("lodash");
 const Path = require("path");
 const ExtendedMetadata_1 = require("./ExtendedMetadata");
 const tslint_1 = require("tslint");
+// tslint:disable-next-line:no-submodule-imports
 const configuration_1 = require("tslint/lib/configuration");
 /*
 const DOCS = {
@@ -41,7 +51,7 @@ const findRuleSets = (item: Item): boolean => {
 */
 const CWD = process.cwd();
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
-const ruleId = ({ ruleName, source }) => `${source}:${ruleName}`;
+const ruleId = ({ ruleName, sourcePath }) => `${sourcePath}:${ruleName}`;
 const rules = glob.sync('*Rule.js', {
     nodir: true, matchBase: true, absolute: true, ignore: [
         '**/tslint/lib/language/**', '**/Rule.js', '**/stylelint/**'
@@ -61,13 +71,19 @@ const rulesAvailable = rules.reduce(
     }
     // tslint:disable-next-line:no-non-null-assertion
     const ruleName = lodash_1.kebabCase(stripped).replace(/-11-/, '11');
-    const paths = path.split(Path.sep);
-    const indexOf = paths.lastIndexOf(NODE_MODULES);
-    const source = indexOf > -1 ? paths[indexOf + 1] : path;
+    const paths = path.replace(CWD, `.`).split(Path.sep);
+    const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
+    const sourcePath = indexOfSource > 0 ?
+        paths.slice(0, indexOfSource + 1).join(Path.sep) : Path.basename(CWD);
+    const source = Path.basename(sourcePath);
     // tslint:disable-next-line:non-literal-require
     const { Rule } = require(path);
-    const data = Rule && Rule.metadata ? Rule.metadata : { ruleName: ruleName };
-    data.source = source;
+    if (!(Rule && Rule instanceof tslint_1.Rules.AbstractRule.constructor))
+        return map;
+    if (!Rule.metadata) {
+        console.warn('no metadata found in rule', sourcePath, ruleName);
+    }
+    const data = Object.assign({}, (Rule.metadata ? Rule.metadata : { ruleName: ruleName }), { source, sourcePath });
     const existing = map.get(ruleName);
     if (existing) {
         // there is another rule with the same name
@@ -96,15 +112,16 @@ const rulesAvailable = rules.reduce(
 }, new Map());
 console.log(``);
 const reportAvailable = {};
-const sources = new Set();
+const sourcePaths = new Set();
 // tslint:disable-next-line
 lodash_1.sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
-    const rule = Object.assign({}, rulesAvailable.get(key)); // tslint:disable-line:no-non-null-assertion
-    delete rule.ruleName;
-    sources.add(rule.source);
-    reportAvailable[key] = rule;
+    // tslint:disable-next-line:no-non-null-assertion since we are iterating keys
+    const rule = Object.assign({}, rulesAvailable.get(key));
+    const { ruleName, sourcePath } = rule, ruleData = __rest(rule, ["ruleName", "sourcePath"]);
+    sourcePaths.add(rule.sourcePath);
+    reportAvailable[key] = ruleData;
 });
-console.log(`${rules.length} rules availabel from ${sources.size} sources:\n`, Array.from(sources.values()).join(', '));
+console.log(`${rules.length} rules available from ${sourcePaths.size} sources:\n`, Array.from(sourcePaths.values()).join(', '));
 fs.writeJSONSync('tslint.report.available.json', reportAvailable, { spaces: 2 });
 // const tslintJson = findConfiguration('tslint.json').results;
 const configFile = Path.join(CWD, 'tslint.json');
