@@ -17,45 +17,20 @@ const ExtendedMetadata_1 = require("./ExtendedMetadata");
 const tslint_1 = require("tslint");
 // tslint:disable-next-line:no-submodule-imports
 const configuration_1 = require("tslint/lib/configuration");
-/*
+const RULE_PATTERN = '{RULE}';
 const DOCS = {
-  tslint: 'https://palantir.github.io/tslint/rules/',
-  'tslint-eslint-rules': 'https://eslint.org/docs/rules/',
-  'tslint-microsoft-contrib':
-    'https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules'
-  ,
-  'tslint-react': 'https://github.com/palantir/tslint-react#rules',
-  'bm-tslint-rules': 'https://github.com/bettermarks/bm-tslint-rules#rules'
+    tslint: `https://palantir.github.io/tslint/rules/${RULE_PATTERN}`,
+    'tslint-eslint-rules': `https://eslint.org/docs/rules/${RULE_PATTERN}`,
+    'tslint-microsoft-contrib': 'https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules',
+    'tslint-react': 'https://github.com/palantir/tslint-react#rules',
+    'bm-tslint-rules': 'https://github.com/bettermarks/bm-tslint-rules#rules'
 };
-*/
-// const isPackage = (item: Item) => item.path.endsWith('package.json');
 const NODE_MODULES = 'node_modules';
-/*
-const packages = walk(NODE_MODULES, {nodir: true, filter: isPackage}).map(item => item.path);
-
-const findRuleSets = (item: Item): boolean => {
-  if (Path.extname(item.path) !== '.json') return false;
-  if (Path.basename(item.path)[0] === '.') return false;
-  if (isPackage(item)) return false;
-  if (item.path.endsWith('package-lock.json')) return false;
-  if (item.path.indexOf('/@types/') > -1) return false;
-
-  try {
-    const config = loadConfigurationFromPath(item.path);
-    return config !== DEFAULT_CONFIG && config !== EMPTY_CONFIG && 'rules' in config;
-  } catch (error) {
-    // console.log(item.path, error);
-    return false;
-  }
-};
-*/
 const CWD = process.cwd();
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
 const ruleId = ({ ruleName, sourcePath }) => `${sourcePath}:${ruleName}`;
 const rules = glob.sync('*Rule.js', {
-    nodir: true, matchBase: true, absolute: true, ignore: [
-        '**/tslint/lib/language/**', '**/Rule.js', '**/stylelint/**'
-    ]
+    nodir: true, matchBase: true, absolute: true, ignore: ['**/tslint/lib/language/**', '**/Rule.js']
 });
 const rulesAvailable = rules.reduce(
 // tslint:disable-next-line:cyclomatic-complexity
@@ -69,21 +44,38 @@ const rulesAvailable = rules.reduce(
         console.log(path, error);
         return map;
     }
+    // kebabCase from ladash is not compatible with tslint's name conversion
+    // so we eed to remove the '-' sign before and after the 11
+    // that are added by kebabCase for all the
+    // react-a11y-* rules from tslint-microsoft-contrib
     // tslint:disable-next-line:no-non-null-assertion
     const ruleName = lodash_1.kebabCase(stripped).replace(/-11-/, '11');
-    const paths = path.replace(CWD, `.`).split(Path.sep);
+    const relativePath = path.replace(CWD, `.`);
+    const paths = relativePath.split(Path.sep);
     const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
-    const sourcePath = indexOfSource > 0 ?
-        paths.slice(0, indexOfSource + 1).join(Path.sep) : Path.basename(CWD);
-    const source = Path.basename(sourcePath);
+    const inInNodeModules = indexOfSource > 0;
+    const sourcePath = inInNodeModules ?
+        paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
+    const source = Path.basename(inInNodeModules ? sourcePath : CWD);
     // tslint:disable-next-line:non-literal-require
     const { Rule } = require(path);
     if (!(Rule && Rule instanceof tslint_1.Rules.AbstractRule.constructor))
         return map;
-    if (!Rule.metadata) {
-        console.warn('no metadata found in rule', sourcePath, ruleName);
+    /*
+        if (!Rule.metadata) {
+          console.warn('no metadata found in rule', sourcePath, ruleName);
+        }
+    */
+    const documentation = (source in DOCS ? DOCS[source] : '')
+        .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
+    const metadata = Rule.metadata ? Rule.metadata : { ruleName: ruleName };
+    if (!metadata.options) {
+        delete metadata.options;
+        delete metadata.optionsDescription;
+        delete metadata.optionExamples;
     }
-    const data = Object.assign({}, (Rule.metadata ? Rule.metadata : { ruleName: ruleName }), { source, sourcePath });
+    const data = Object.assign({}, metadata, (documentation ? { documentation } : {}), { path: relativePath, source,
+        sourcePath });
     const existing = map.get(ruleName);
     if (existing) {
         // there is another rule with the same name
@@ -110,18 +102,32 @@ const rulesAvailable = rules.reduce(
     }
     return map;
 }, new Map());
-console.log(``);
 const reportAvailable = {};
-const sourcePaths = new Set();
+const sources = lodash_1.sortedUniqBy(Array.from(rulesAvailable.values()), 'sourcePath').map(({ source, sourcePath }) => {
+    const { _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies } = fs.readJsonSync(Path.join(sourcePath, 'package.json'));
+    return ({
+        _from,
+        _resolved,
+        bugs,
+        deprecated,
+        description,
+        docs: source in DOCS ? DOCS[source] : 'unknown',
+        homepage,
+        main,
+        name: source,
+        path: sourcePath,
+        peerDependencies
+    });
+});
+reportAvailable.$sources = lodash_1.sortBy(sources, 'name');
 // tslint:disable-next-line
 lodash_1.sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
     // tslint:disable-next-line:no-non-null-assertion since we are iterating keys
     const rule = Object.assign({}, rulesAvailable.get(key));
-    const { ruleName, sourcePath } = rule, ruleData = __rest(rule, ["ruleName", "sourcePath"]);
-    sourcePaths.add(rule.sourcePath);
+    const { ruleName } = rule, ruleData = __rest(rule, ["ruleName"]);
     reportAvailable[key] = ruleData;
 });
-console.log(`${rules.length} rules available from ${sourcePaths.size} sources:\n`, Array.from(sourcePaths.values()).join(', '));
+console.log(`${rules.length} rules available from ${sources.length} sources:`, JSON.stringify(sources.map(source => source.path), undefined, 2));
 fs.writeJSONSync('tslint.report.available.json', reportAvailable, { spaces: 2 });
 // const tslintJson = findConfiguration('tslint.json').results;
 const configFile = Path.join(CWD, 'tslint.json');
@@ -149,8 +155,9 @@ lodash_1.sortBy(loadedRules, 'ruleName').forEach((rule) => {
     // sometimes deprecation message is an empty string, which still means deprecated,
     // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
     const deprecated = deprecationMessage !== undefined || (group && group === ExtendedMetadata_1.DEPRECATED);
-    if (deprecated)
+    if (deprecated) {
         console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
+    }
     report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
         source }, (source !== 'tslint' && sameName && sameName.length && { sameName }));
 });

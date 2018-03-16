@@ -1,63 +1,45 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy} from 'lodash';
+import {kebabCase, sortBy, sortedUniqBy} from 'lodash';
 import * as Path from 'path';
 import {ExtendedMetadata, DEPRECATED} from './ExtendedMetadata';
 import {IOptions, IRuleMetadata, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
 
-/*
+const RULE_PATTERN = '{RULE}';
+
 const DOCS = {
-  tslint: 'https://palantir.github.io/tslint/rules/',
-  'tslint-eslint-rules': 'https://eslint.org/docs/rules/',
+  tslint: `https://palantir.github.io/tslint/rules/${RULE_PATTERN}`,
+  'tslint-eslint-rules': `https://eslint.org/docs/rules/${RULE_PATTERN}`,
   'tslint-microsoft-contrib':
-    'https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules'
-  ,
+    'https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules',
   'tslint-react': 'https://github.com/palantir/tslint-react#rules',
   'bm-tslint-rules': 'https://github.com/bettermarks/bm-tslint-rules#rules'
 };
-*/
 
-// const isPackage = (item: Item) => item.path.endsWith('package.json');
 const NODE_MODULES = 'node_modules';
-/*
-const packages = walk(NODE_MODULES, {nodir: true, filter: isPackage}).map(item => item.path);
-
-const findRuleSets = (item: Item): boolean => {
-  if (Path.extname(item.path) !== '.json') return false;
-  if (Path.basename(item.path)[0] === '.') return false;
-  if (isPackage(item)) return false;
-  if (item.path.endsWith('package-lock.json')) return false;
-  if (item.path.indexOf('/@types/') > -1) return false;
-
-  try {
-    const config = loadConfigurationFromPath(item.path);
-    return config !== DEFAULT_CONFIG && config !== EMPTY_CONFIG && 'rules' in config;
-  } catch (error) {
-    // console.log(item.path, error);
-    return false;
-  }
-};
-*/
 const CWD = process.cwd();
 
 type ReportData = {
+  documentation?: string;
+  path: string;
   ruleName: string;
   source: string;
   sourcePath: string;
   sameName?: string[];
 };
-type RuleData = Partial<IRuleMetadata & ExtendedMetadata> & ReportData;
+type RuleMetadata = Partial<IRuleMetadata & ExtendedMetadata> & {
+  ruleName: string;
+};
+type RuleData = RuleMetadata & ReportData;
 
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
 const ruleId = ({ruleName, sourcePath}: ReportData) => `${sourcePath}:${ruleName}`;
 
 const rules = glob.sync('*Rule.js', {
-  nodir: true, matchBase: true, absolute: true, ignore: [
-    '**/tslint/lib/language/**', '**/Rule.js', '**/stylelint/**'
-  ]
+  nodir: true, matchBase: true, absolute: true, ignore: ['**/tslint/lib/language/**', '**/Rule.js']
 });
 const rulesAvailable = rules.reduce(
   // tslint:disable-next-line:cyclomatic-complexity
@@ -70,25 +52,47 @@ const rulesAvailable = rules.reduce(
       console.log(path, error);
       return map;
     }
+
+    // kebabCase from ladash is not compatible with tslint's name conversion
+    // so we eed to remove the '-' sign before and after the 11
+    // that are added by kebabCase for all the
+    // react-a11y-* rules from tslint-microsoft-contrib
     // tslint:disable-next-line:no-non-null-assertion
     const ruleName = kebabCase(stripped).replace(/-11-/, '11');
 
-    const paths = path.replace(CWD, `.`).split(Path.sep);
+    const relativePath = path.replace(CWD, `.`);
+    const paths = relativePath.split(Path.sep);
     const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
-    const sourcePath = indexOfSource > 0 ?
-      paths.slice(0, indexOfSource + 1).join(Path.sep) : Path.basename(CWD);
-    const source = Path.basename(sourcePath);
+    const inInNodeModules = indexOfSource > 0;
+    const sourcePath = inInNodeModules ?
+      paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
+    const source = Path.basename(inInNodeModules ? sourcePath : CWD);
 
     // tslint:disable-next-line:non-literal-require
     const {Rule} = require(path);
     if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return map;
 
+/*
     if (!Rule.metadata) {
       console.warn('no metadata found in rule', sourcePath, ruleName);
     }
+*/
+    const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
+      .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
+
+    const metadata: RuleMetadata = Rule.metadata ? Rule.metadata : {ruleName: ruleName};
+    if (!metadata.options) {
+      delete metadata.options;
+      delete metadata.optionsDescription;
+      delete metadata.optionExamples;
+    }
+
     const data: RuleData = {
-      ...(Rule.metadata ? Rule.metadata : {ruleName: ruleName}),
-      source, sourcePath
+      ...metadata,
+      ...(documentation ? {documentation} : {}),
+      path: relativePath,
+      source,
+      sourcePath
     };
 
     const existing = map.get(ruleName);
@@ -120,25 +124,64 @@ const rulesAvailable = rules.reduce(
   },
   new Map<string, RuleData>()
 );
-console.log(``);
+
+type PackageJson = {
+  _from: string;
+  _resolved: string;
+  bugs?: { url: string };
+  deprecated: boolean;
+  description: string;
+  homepage?: string;
+  main: string;
+  peerDependencies: {
+    tslint?: string;
+    typescript?: string;
+  };
+};
+
+type Source = PackageJson & {
+  name: string;
+  path: string;
+  docs: string;
+};
 
 const reportAvailable: any = {};
-const sourcePaths = new Set<string>();
+const sources: ReadonlyArray<Source> = sortedUniqBy<RuleData>(
+  Array.from(rulesAvailable.values()), 'sourcePath'
+).map(({source, sourcePath}): Source => {
+  const {
+    _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
+  } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
+
+  return ({
+    _from,
+    _resolved,
+    bugs,
+    deprecated,
+    description,
+    docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
+    homepage,
+    main,
+    name: source,
+    path: sourcePath,
+    peerDependencies
+  });
+});
+
+reportAvailable.$sources = sortBy(sources, 'name');
 
 // tslint:disable-next-line
 sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
   // tslint:disable-next-line:no-non-null-assertion since we are iterating keys
   const rule = {...rulesAvailable.get(key)!};
-  const {ruleName, sourcePath, ...ruleData} = rule;
-  sourcePaths.add(rule.sourcePath);
+  const {ruleName, ...ruleData} = rule;
   reportAvailable[key] = ruleData;
 });
 console.log(
-  `${rules.length} rules available from ${sourcePaths.size} sources:\n`,
-  Array.from(sourcePaths.values()).join(', ')
+  `${rules.length} rules available from ${sources.length} sources:`,
+  JSON.stringify(sources.map(source => source.path), undefined, 2)
 );
 fs.writeJSONSync('tslint.report.available.json', reportAvailable, {spaces: 2});
-
 
 // const tslintJson = findConfiguration('tslint.json').results;
 const configFile = Path.join(CWD, 'tslint.json');
@@ -171,8 +214,9 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
   // sometimes deprecation message is an empty string, which still means deprecated,
   // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
   const deprecated = deprecationMessage !== undefined || (group && group === DEPRECATED);
-  if (deprecated)
+  if (deprecated) {
     console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
+  }
 
   report[ruleName] = {
     ...(deprecated && {deprecated: deprecationMessage || true}),
