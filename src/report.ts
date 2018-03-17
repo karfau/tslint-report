@@ -1,12 +1,13 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy, sortedUniqBy} from 'lodash';
+import {kebabCase, sortBy, sortedUniqBy, values} from 'lodash';
 import * as Path from 'path';
-import {ExtendedMetadata, DEPRECATED} from './ExtendedMetadata';
-import {IOptions, IRuleMetadata, loadRules, Rules} from 'tslint';
+import {IOptions, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
+import {DEPRECATED} from './ExtendedMetadata';
+import {ActiveRule, Dict, PackageJson, ReportData, RuleData, RuleMetadata, Source} from './types';
 
 const RULE_PATTERN = '{RULE}';
 
@@ -22,35 +23,22 @@ const DOCS = {
 const NODE_MODULES = 'node_modules';
 const CWD = process.cwd();
 
-type ReportData = {
-  documentation?: string;
-  path: string;
-  ruleName: string;
-  source: string;
-  sourcePath: string;
-  sameName?: string[];
-};
-type RuleMetadata = Partial<IRuleMetadata & ExtendedMetadata> & {
-  ruleName: string;
-};
-type RuleData = RuleMetadata & ReportData;
-
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
 const ruleId = ({ruleName, sourcePath}: ReportData) => `${sourcePath}:${ruleName}`;
 
 const rules = glob.sync('*Rule.js', {
   nodir: true, matchBase: true, absolute: true, ignore: ['**/tslint/lib/language/**', '**/Rule.js']
 });
-const rulesAvailable = rules.reduce(
+const rulesAvailable = rules.reduce<Dict<RuleData>>(
   // tslint:disable-next-line:cyclomatic-complexity
-  (map, path) => {
+  (dict, path) => {
     let stripped;
     try {
       // tslint:disable-next-line:no-non-null-assertion
       stripped = /\/(\w+)Rule\..*/.exec(path)![1];
     } catch (error) {
       console.log(path, error);
-      return map;
+      return dict;
     }
 
     // kebabCase from ladash is not compatible with tslint's name conversion
@@ -70,13 +58,13 @@ const rulesAvailable = rules.reduce(
 
     // tslint:disable-next-line:non-literal-require
     const {Rule} = require(path);
-    if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return map;
+    if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return dict;
 
-/*
-    if (!Rule.metadata) {
-      console.warn('no metadata found in rule', sourcePath, ruleName);
-    }
-*/
+    /*
+        if (!Rule.metadata) {
+          console.warn('no metadata found in rule', sourcePath, ruleName);
+        }
+    */
     const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
       .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
 
@@ -95,7 +83,7 @@ const rulesAvailable = rules.reduce(
       sourcePath
     };
 
-    const existing = map.get(ruleName);
+    const existing = dict[ruleName];
     if (existing) {
       // there is another rule with the same name
       const currentId = ruleId(data);
@@ -103,84 +91,62 @@ const rulesAvailable = rules.reduce(
       if (source === 'tslint') {
         // the current one wins because custom rules can not override tslint rules
         data.sameName = [...(existing.sameName ? existing.sameName : []), existingId];
-        map.set(existingId, existing);
-        map.set(ruleName, data);
+        dict[existingId] = existing;
+        dict[ruleName] = data;
       } else {
         // non deterministic which one wins
         if (existing.source !== 'tslint') {
-          console.warn(
-            `rules with same name '${ruleName}' from different sources`,
-            [existingId, currentId]
+          console.log(
+            `rule name '${ruleName}' used different sources (first extend wins)`
           );
         }
-        // we keep the one in the map, point to the conflict and only store the current one under ID
+        // we keep the one in dict, point to the conflict and only store the current one under ID
         existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
-        map.set(currentId, data);
+        dict[currentId] = data;
       }
     } else {
-      map.set(ruleName, data);
+      dict[ruleName] = data;
     }
-    return map;
+    return dict;
   },
-  new Map<string, RuleData>()
+  {}
 );
 
-type PackageJson = {
-  _from: string;
-  _resolved: string;
-  bugs?: { url: string };
-  deprecated: boolean;
-  description: string;
-  homepage?: string;
-  main: string;
-  peerDependencies: {
-    tslint?: string;
-    typescript?: string;
-  };
-};
-
-type Source = PackageJson & {
-  name: string;
-  path: string;
-  docs: string;
-};
-
 const reportAvailable: any = {};
-const sources: ReadonlyArray<Source> = sortedUniqBy<RuleData>(
-  Array.from(rulesAvailable.values()), 'sourcePath'
-).map(({source, sourcePath}): Source => {
-  const {
-    _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
-  } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
+const sources: Dict<Source> = {};
+sortedUniqBy<RuleData>(values(rulesAvailable), 'sourcePath')
+  .forEach(({source, sourcePath}) => {
+    const {
+      _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
+    } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
 
-  return ({
-    _from,
-    _resolved,
-    bugs,
-    deprecated,
-    description,
-    docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
-    homepage,
-    main,
-    name: source,
-    path: sourcePath,
-    peerDependencies
+    sources[sourcePath] = {
+      _from,
+      _resolved,
+      bugs,
+      deprecated,
+      description,
+      docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
+      homepage,
+      main,
+      name: source,
+      path: sourcePath,
+      peerDependencies
+    };
   });
-});
 
-reportAvailable.$sources = sortBy(sources, 'name');
+// reportAvailable.$sources = sources;
 
-// tslint:disable-next-line
-sortBy(Array.from(rulesAvailable.keys())).forEach((key) => {
-  // tslint:disable-next-line:no-non-null-assertion since we are iterating keys
-  const rule = {...rulesAvailable.get(key)!};
+sortBy(Object.keys(rulesAvailable)).forEach(key => {
+  const rule = {...rulesAvailable[key]};
   const {ruleName, ...ruleData} = rule;
   reportAvailable[key] = ruleData;
 });
 console.log(
-  `${rules.length} rules available from ${sources.length} sources:`,
-  JSON.stringify(sources.map(source => source.path), undefined, 2)
+  `${rules.length} rules available from ${Object.keys(sources).length} sources:`,
+  JSON.stringify(Object.keys(sources), undefined, 2)
 );
+fs.writeJSONSync('tslint.report.sources.json', sources, {spaces: 2});
 fs.writeJSONSync('tslint.report.available.json', reportAvailable, {spaces: 2});
 
 // const tslintJson = findConfiguration('tslint.json').results;
@@ -192,13 +158,12 @@ rulesFromConfig.rules.forEach((option, key) => {
   namedRules.push({...(option as IOptions), ruleName: key});
 });
 const loadedRules = loadRules(namedRules, rulesFromConfig.rulesDirectory);
-const report: any = {};
+const report: Dict<ActiveRule> = {};
 
 // tslint:disable-next-line:cyclomatic-complexity
 sortBy(loadedRules, 'ruleName').forEach((rule) => {
   const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
-
-  if (!rulesAvailable.has(ruleName)) {
+  if (!(ruleName in rulesAvailable)) {
     report[ruleName] = {
       ruleArguments,
       ruleSeverity
@@ -206,7 +171,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
     console.log('Rule not found as available', ruleName);
     return;
   }
-  const ruleData = rulesAvailable.get(ruleName)!; // tslint:disable-line:no-non-null-assertion
+  const ruleData = rulesAvailable[ruleName];
   const {
     deprecationMessage, group, source, sameName
   } = ruleData;
