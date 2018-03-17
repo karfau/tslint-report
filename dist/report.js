@@ -61,11 +61,9 @@ const rulesAvailable = rules.reduce(
     const { Rule } = require(path);
     if (!(Rule && Rule instanceof tslint_1.Rules.AbstractRule.constructor))
         return dict;
-    /*
-        if (!Rule.metadata) {
-          console.warn('no metadata found in rule', sourcePath, ruleName);
-        }
-    */
+    if (!Rule.metadata) {
+        console.log('no metadata found in rule', sourcePath, ruleName);
+    }
     const documentation = (source in DOCS ? DOCS[source] : '')
         .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
     const metadata = Rule.metadata ? Rule.metadata : { ruleName: ruleName };
@@ -90,7 +88,7 @@ const rulesAvailable = rules.reduce(
         else {
             // non deterministic which one wins
             if (existing.source !== 'tslint') {
-                console.log(`rule name '${ruleName}' used different sources (first extend wins)`);
+                console.log(`rule name '${ruleName}' available from different sources (first extend wins)`);
             }
             // we keep the one in dict, point to the conflict and only store the current one under ID
             existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
@@ -152,14 +150,14 @@ lodash_1.sortBy(loadedRules, 'ruleName').forEach((rule) => {
         return;
     }
     const ruleData = rulesAvailable[ruleName];
-    const { deprecationMessage, group, source, sameName } = ruleData;
+    const { deprecationMessage, documentation, group, source, sameName } = ruleData;
     // sometimes deprecation message is an empty string, which still means deprecated,
     // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
     const deprecated = deprecationMessage !== undefined || (group && group === ExtendedMetadata_1.DEPRECATED);
     if (deprecated) {
         console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
     }
-    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
+    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (documentation && { documentation }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
         source }, (source !== 'tslint' && sameName && sameName.length && { sameName }));
 });
 fs.writeJSONSync('tslint.report.active.json', report, { spaces: 2 });

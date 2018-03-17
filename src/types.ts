@@ -1,18 +1,19 @@
 import {IRuleMetadata, RuleSeverity} from 'tslint';
 import {ExtendedMetadata} from './ExtendedMetadata';
 
+export type RuleName = {
+  ruleName: string;
+};
+
 export type ReportData = {
   documentation?: string;
   path: string;
-  ruleName: string;
   source: string;
   sourcePath: string;
   sameName?: string[];
 };
 
-export type RuleMetadata = Partial<IRuleMetadata & ExtendedMetadata> & {
-  ruleName: string;
-};
+export type RuleMetadata = Partial<IRuleMetadata & ExtendedMetadata> & RuleName;
 
 export type RuleData = RuleMetadata & ReportData;
 
@@ -40,6 +41,7 @@ export type Dict<T> = {[key: string]: T};
 
 export type ActiveRule = {
   deprecated?: string | boolean;
+  documentation?: string;
   ruleArguments?: any[];
   ruleSeverity: RuleSeverity;
   sameName?: string[];

@@ -24,7 +24,9 @@ const NODE_MODULES = 'node_modules';
 const CWD = process.cwd();
 
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
-const ruleId = ({ruleName, sourcePath}: ReportData) => `${sourcePath}:${ruleName}`;
+const ruleId = (
+  {ruleName, sourcePath}: {ruleName: string; sourcePath: string}
+) => `${sourcePath}:${ruleName}`;
 
 const rules = glob.sync('*Rule.js', {
   nodir: true, matchBase: true, absolute: true, ignore: ['**/tslint/lib/language/**', '**/Rule.js']
@@ -60,11 +62,9 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
     const {Rule} = require(path);
     if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return dict;
 
-    /*
-        if (!Rule.metadata) {
-          console.warn('no metadata found in rule', sourcePath, ruleName);
-        }
-    */
+    if (!Rule.metadata) {
+      console.log('no metadata found in rule', sourcePath, ruleName);
+    }
     const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
       .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
 
@@ -97,7 +97,7 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
         // non deterministic which one wins
         if (existing.source !== 'tslint') {
           console.log(
-            `rule name '${ruleName}' used different sources (first extend wins)`
+            `rule name '${ruleName}' available from different sources (first extend wins)`
           );
         }
         // we keep the one in dict, point to the conflict and only store the current one under ID
@@ -112,7 +112,7 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
   {}
 );
 
-const reportAvailable: any = {};
+const reportAvailable: Dict<ReportData> = {};
 const sources: Dict<Source> = {};
 sortedUniqBy<RuleData>(values(rulesAvailable), 'sourcePath')
   .forEach(({source, sourcePath}) => {
@@ -173,7 +173,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
   }
   const ruleData = rulesAvailable[ruleName];
   const {
-    deprecationMessage, group, source, sameName
+    deprecationMessage, documentation, group, source, sameName
   } = ruleData;
 
   // sometimes deprecation message is an empty string, which still means deprecated,
@@ -185,6 +185,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
 
   report[ruleName] = {
     ...(deprecated && {deprecated: deprecationMessage || true}),
+    ...(documentation && {documentation}),
     ...(ruleArguments && ruleArguments.length && {ruleArguments}),
     ruleSeverity,
     source,
