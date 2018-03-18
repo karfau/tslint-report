@@ -42,6 +42,7 @@ export type Dict<T> = {[key: string]: T};
 export type ActiveRule = {
   deprecated?: string | boolean;
   documentation?: string;
+  hasFix?: boolean;
   ruleArguments?: any[];
   ruleSeverity: RuleSeverity;
   sameName?: string[];

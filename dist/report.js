@@ -150,14 +150,14 @@ lodash_1.sortBy(loadedRules, 'ruleName').forEach((rule) => {
         return;
     }
     const ruleData = rulesAvailable[ruleName];
-    const { deprecationMessage, documentation, group, source, sameName } = ruleData;
+    const { deprecationMessage, documentation, hasFix, group, source, sameName } = ruleData;
     // sometimes deprecation message is an empty string, which still means deprecated,
     // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
     const deprecated = deprecationMessage !== undefined || (group && group === ExtendedMetadata_1.DEPRECATED);
     if (deprecated) {
         console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
     }
-    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (documentation && { documentation }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
+    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (documentation && { documentation }), (hasFix && { hasFix }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
         source }, (source !== 'tslint' && sameName && sameName.length && { sameName }));
 });
 fs.writeJSONSync('tslint.report.active.json', report, { spaces: 2 });

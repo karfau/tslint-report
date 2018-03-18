@@ -173,7 +173,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
   }
   const ruleData = rulesAvailable[ruleName];
   const {
-    deprecationMessage, documentation, group, source, sameName
+    deprecationMessage, documentation, hasFix, group, source, sameName
   } = ruleData;
 
   // sometimes deprecation message is an empty string, which still means deprecated,
@@ -186,6 +186,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
   report[ruleName] = {
     ...(deprecated && {deprecated: deprecationMessage || true}),
     ...(documentation && {documentation}),
+    ...(hasFix && {hasFix}),
     ...(ruleArguments && ruleArguments.length && {ruleArguments}),
     ruleSeverity,
     source,
