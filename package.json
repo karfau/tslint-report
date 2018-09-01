@@ -33,7 +33,7 @@
   "license": "MIT",
   "dependencies": {
     "lodash": "^4.17.5",
-    "fs-extra": "^5.0.0",
+    "fs-extra": "^7.0.0",
     "glob": "^7.1.2"
   },
   "devDependencies": {
