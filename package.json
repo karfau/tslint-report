@@ -43,7 +43,7 @@
     "@types/node": "10.9.4",
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#v0.2.3",
     "ts-node": "5.0.1",
-    "typescript": "2.7.2"
+    "typescript": "2.9.2"
   },
   "peerDependencies": {
     "tslint": ">=5.0.0",
