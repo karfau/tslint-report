@@ -47,4 +47,6 @@ export type ActiveRule = {
   ruleSeverity: RuleSeverity;
   sameName?: string[];
   source?: string;
+  group?: string;
+  type?: string;
 };
