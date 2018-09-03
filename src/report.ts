@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy, sortedUniqBy, values} from 'lodash';
+import {kebabCase, sortBy, sortedUniqBy, values, countBy} from 'lodash';
 import * as Path from 'path';
 import {IOptions, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
@@ -44,10 +44,9 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
     }
 
     // kebabCase from ladash is not compatible with tslint's name conversion
-    // so we eed to remove the '-' sign before and after the 11
+    // so we need to remove the '-' sign before and after the 11
     // that are added by kebabCase for all the
     // react-a11y-* rules from tslint-microsoft-contrib
-    // tslint:disable-next-line:no-non-null-assertion
     const ruleName = kebabCase(stripped).replace(/-11-/, '11');
 
     const relativePath = path.replace(CWD, `.`);
@@ -77,7 +76,7 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
 
     const data: RuleData = {
       ...metadata,
-      ...(documentation ? {documentation} : {}),
+      ...(documentation && {documentation}),
       path: relativePath,
       source,
       sourcePath
@@ -100,7 +99,8 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
             `rule name '${ruleName}' available from different sources (first extend wins)`
           );
         }
-        // we keep the one in dict, point to the conflict and only store the current one under ID
+        // we keep the existing one in the dict, point to the conflict
+        // and only store the current one under its ID
         existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
         dict[currentId] = data;
       }
@@ -173,7 +173,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
   }
   const ruleData = rulesAvailable[ruleName];
   const {
-    deprecationMessage, documentation, hasFix, group, source, sameName
+    deprecationMessage, documentation, hasFix, group, source, sameName, type
   } = ruleData;
 
   // sometimes deprecation message is an empty string, which still means deprecated,
@@ -187,6 +187,8 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
     ...(deprecated && {deprecated: deprecationMessage || true}),
     ...(documentation && {documentation}),
     ...(hasFix && {hasFix}),
+    ...(group && {group}),
+    ...(type && {type}),
     ...(ruleArguments && ruleArguments.length && {ruleArguments}),
     ruleSeverity,
     source,
@@ -196,3 +198,9 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
 
 fs.writeJSONSync('tslint.report.active.json', report, {spaces: 2});
 console.log('active rules:', loadedRules.length);
+const reportBy = (key: keyof ActiveRule) =>
+  console.log(`by ${key}:\n${
+  JSON.stringify(countBy(report, key), null, 2).replace(/[{}]/g, '')}`);
+
+reportBy('type');
+reportBy('group');
