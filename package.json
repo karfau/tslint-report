@@ -1,6 +1,6 @@
 {
   "name": "tslint-report",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "This is a utility for maintaining a tslint rule set.",
   "repository": "https://github.com/karfau/tslint-report",
   "bugs": "https://github.com/karfau/tslint-report/issues",

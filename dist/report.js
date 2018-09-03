@@ -45,10 +45,9 @@ const rulesAvailable = rules.reduce(
         return dict;
     }
     // kebabCase from ladash is not compatible with tslint's name conversion
-    // so we eed to remove the '-' sign before and after the 11
+    // so we need to remove the '-' sign before and after the 11
     // that are added by kebabCase for all the
     // react-a11y-* rules from tslint-microsoft-contrib
-    // tslint:disable-next-line:no-non-null-assertion
     const ruleName = lodash_1.kebabCase(stripped).replace(/-11-/, '11');
     const relativePath = path.replace(CWD, `.`);
     const paths = relativePath.split(Path.sep);
@@ -72,7 +71,7 @@ const rulesAvailable = rules.reduce(
         delete metadata.optionsDescription;
         delete metadata.optionExamples;
     }
-    const data = Object.assign({}, metadata, (documentation ? { documentation } : {}), { path: relativePath, source,
+    const data = Object.assign({}, metadata, (documentation && { documentation }), { path: relativePath, source,
         sourcePath });
     const existing = dict[ruleName];
     if (existing) {
@@ -90,7 +89,8 @@ const rulesAvailable = rules.reduce(
             if (existing.source !== 'tslint') {
                 console.log(`rule name '${ruleName}' available from different sources (first extend wins)`);
             }
-            // we keep the one in dict, point to the conflict and only store the current one under ID
+            // we keep the existing one in the dict, point to the conflict
+            // and only store the current one under its ID
             existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
             dict[currentId] = data;
         }
@@ -150,15 +150,18 @@ lodash_1.sortBy(loadedRules, 'ruleName').forEach((rule) => {
         return;
     }
     const ruleData = rulesAvailable[ruleName];
-    const { deprecationMessage, documentation, hasFix, group, source, sameName } = ruleData;
+    const { deprecationMessage, documentation, hasFix, group, source, sameName, type } = ruleData;
     // sometimes deprecation message is an empty string, which still means deprecated,
     // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
     const deprecated = deprecationMessage !== undefined || (group && group === ExtendedMetadata_1.DEPRECATED);
     if (deprecated) {
         console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
     }
-    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (documentation && { documentation }), (hasFix && { hasFix }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
+    report[ruleName] = Object.assign({}, (deprecated && { deprecated: deprecationMessage || true }), (documentation && { documentation }), (hasFix && { hasFix }), (group && { group }), (type && { type }), (ruleArguments && ruleArguments.length && { ruleArguments }), { ruleSeverity,
         source }, (source !== 'tslint' && sameName && sameName.length && { sameName }));
 });
 fs.writeJSONSync('tslint.report.active.json', report, { spaces: 2 });
 console.log('active rules:', loadedRules.length);
+const reportBy = (key) => console.log(`by ${key}:\n${JSON.stringify(lodash_1.countBy(report, key), null, 2).replace(/[{}]/g, '')}`);
+reportBy('type');
+reportBy('group');
