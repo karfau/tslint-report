@@ -1,5 +1,7 @@
 # tslint-report
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/karfau/tslint-report.svg)](https://greenkeeper.io/)
+
 This is a utility for maintaining a [tslint](https://github.com/palantir/tslint) rule set.
 
 The goal is to generate reports that can easily be compared,
