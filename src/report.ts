@@ -1,9 +1,9 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy, countBy, uniqBy, values} from 'lodash';
+import {countBy, kebabCase, sortBy, uniqBy, values} from 'lodash';
 import * as Path from 'path';
-import {IOptions, loadRules, Rules} from 'tslint';
+import {IOptions, IRule, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
 import {DEPRECATED} from './ExtendedMetadata';
@@ -27,16 +27,16 @@ const NODE_MODULES = 'node_modules';
 const TSLINT = `tslint`;
 const CWD = process.cwd();
 
-type Raw = ReportData & RuleName & {
+type RuleFromFS = ReportData & RuleName & {
   metadata?: any;
 };
-const isRaw = (r: Raw | undefined): r is Raw => r !== undefined;
+const isRuleFromFS = (r: RuleFromFS | undefined): r is RuleFromFS => r !== undefined;
 
-const pathToRaw = (
+const pathToRuleFromFS = (
   req = require
 ) => (
   path: string
-): Raw | undefined => {
+): RuleFromFS | undefined => {
   let stripped;
   try {
     // tslint:disable-next-line:no-non-null-assertion
@@ -65,16 +65,16 @@ const pathToRaw = (
   if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return;
 
   return {
-    id: `${sourcePath}:${ruleName}`,
     ruleName,
+    source,
     path: relativePath,
     metadata: Rule.metadata,
-    source,
-    sourcePath
+    sourcePath,
+    id: `${sourcePath}:${ruleName}`
   };
 };
 
-const rawToRuleData = ({metadata, ruleName, source, sourcePath, ...data}: Raw) => {
+const fsToRuleData = ({metadata, ruleName, source, sourcePath, ...data}: RuleFromFS) => {
   if (!metadata) {
     console.log('no metadata found in rule', sourcePath, ruleName);
   }
@@ -114,14 +114,14 @@ const rules: ReadonlyArray<RuleData> = glob
       '**/tslint/lib/language/**', '**/Rule.js'
     ]
   })
-  .map(pathToRaw())
-  .filter(isRaw)
-  .map(rawToRuleData);
+  .map(pathToRuleFromFS())
+  .filter(isRuleFromFS)
+  .map(fsToRuleData);
 
-export type SourceRaw = [string, string];
-const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<SourceRaw> => {
+export type SourceTuple = [string, string];
+const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<SourceTuple> => {
   const unordered = uniqBy(rules, r => r.source)
-    .map<SourceRaw>(r => [r.source, r.sourcePath]);
+    .map<SourceTuple>(r => [r.source, r.sourcePath]);
   // TODO sort by order defined in config files? (issue #2)
   const tslint = unordered.find(([source]) => source === TSLINT);
 
@@ -133,10 +133,14 @@ const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<Sourc
 
 const sourcesOrder = createSourcesOrder(rules);
 
-const rawToSource = (sources: Dict<Source>, [source, sourcePath]: SourceRaw) => {
+const rawToSources = (
+  {readJsonSync}: Pick<typeof fs, 'readJsonSync'> = fs
+) => (
+  sources: Dict<Source>, [source, sourcePath]: SourceTuple
+) => {
   const {
     _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
-  } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
+  } = readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
 
   sources[sourcePath] = {
     _from,
@@ -154,7 +158,7 @@ const rawToSource = (sources: Dict<Source>, [source, sourcePath]: SourceRaw) => 
   return sources;
 };
 
-const sources = sourcesOrder.reduce<Dict<Source>>(rawToSource, {});
+const sources = sourcesOrder.reduce<Dict<Source>>(rawToSources(), {});
 
 const rulesAvailable = sortBy(
   rules, ['ruleName', (r: RuleData) => sourcesOrder.findIndex(([source]) => r.source === source)])
@@ -185,18 +189,26 @@ console.log(
 fs.writeJSONSync('tslint.report.sources.json', sources, {spaces: 2});
 fs.writeJSONSync('tslint.report.available.json', rulesAvailable, {spaces: 2});
 
-const configFile = Path.join(CWD, 'tslint.json');
+const loadRulesFromConfig = (
+  tslint_loadConfig = loadConfigurationFromPath, tslint_loadRules = loadRules
+) => (
+  configFile: string
+) => {
+  const rulesFromConfig = tslint_loadConfig(configFile, configFile);
+  const namedRules: IOptions[] = [];
+  rulesFromConfig.rules.forEach((option, key) => {
+    // console.log(key, JSON.stringify(option));
+    namedRules.push({...(option as IOptions), ruleName: key});
+  });
+  return sortBy(tslint_loadRules(namedRules, rulesFromConfig.rulesDirectory), 'ruleName');
+};
 
-const rulesFromConfig = loadConfigurationFromPath(configFile, configFile);
-const namedRules: IOptions[] = [];
-rulesFromConfig.rules.forEach((option, key) => {
-  // console.log(key, JSON.stringify(option));
-  namedRules.push({...(option as IOptions), ruleName: key});
-});
-const loadedRules = sortBy(loadRules(namedRules, rulesFromConfig.rulesDirectory), 'ruleName');
+const loadedRules = loadRulesFromConfig()(Path.join(CWD, 'tslint.json'));
 
-// sometimes deprecation message is an empty string, which still means deprecated,
-// tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
+/**
+ sometimes deprecation message is an empty string, which still means deprecated,
+ tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
+*/
 const deprecation = (
   deprecationMessage: string | undefined, group: string | undefined
 ): string | boolean => {
@@ -206,39 +218,38 @@ const deprecation = (
   return group === DEPRECATED;
 };
 
-const report = loadedRules.reduce<Dict<ActiveRule>>(
-  (report, rule) => {
-    const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
-    const ruleData = rulesAvailable[ruleName];
-    if (!ruleData) {
-      console.log('Rule not found as available', ruleName);
-      report[ruleName] = {
-        ruleName,
-        ruleArguments,
-        ruleSeverity
-      };
-    } else {
-      const {
-        deprecationMessage, documentation, hasFix, group, source, sameName, type
-      } = ruleData;
-      const deprecated = deprecation(deprecationMessage, group);
-      report[ruleName] = {
-        ruleName,
-        ruleSeverity,
-        source,
-        ...(deprecated && {deprecated}),
-        ...(documentation && {documentation}),
-        ...(hasFix && {hasFix}),
-        ...(group && {group}),
-        ...(type && {type}),
-        ...(ruleArguments && {ruleArguments}),
-        ...(sameName && {sameName: sameName.map(r => r.id)})
-      };
-    }
-    return report;
-  },
-  {}
-);
+const loadedToActiveRules = (report: Dict<ActiveRule>, rule: IRule) => {
+  const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
+  const ruleData = rulesAvailable[ruleName];
+  if (!ruleData) {
+    console.log('Rule not found as available', ruleName);
+    report[ruleName] = {
+      ruleName,
+      ruleArguments,
+      ruleSeverity
+    };
+  } else {
+    const {
+      deprecationMessage, documentation, hasFix, group, source, sameName, type
+    } = ruleData;
+    const deprecated = deprecation(deprecationMessage, group);
+    report[ruleName] = {
+      ruleName,
+      ruleSeverity,
+      source,
+      ...(deprecated && {deprecated}),
+      ...(documentation && {documentation}),
+      ...(hasFix && {hasFix}),
+      ...(group && {group}),
+      ...(type && {type}),
+      ...(ruleArguments && {ruleArguments}),
+      ...(sameName && {sameName: sameName.map(r => r.id)})
+    };
+  }
+  return report;
+};
+
+const report = loadedRules.reduce<Dict<ActiveRule>>(loadedToActiveRules, {});
 
 values(report)
   .filter(r => r.deprecated)
