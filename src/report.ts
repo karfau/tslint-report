@@ -27,96 +27,101 @@ const NODE_MODULES = 'node_modules';
 const TSLINT = `tslint`;
 const CWD = process.cwd();
 
-// const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
-const ruleId = (
-  {ruleName, sourcePath}: { ruleName: string; sourcePath: string }
-) => `${sourcePath}:${ruleName}`;
-
 type Raw = ReportData & RuleName & {
   metadata?: any;
 };
+const isRaw = (r: Raw | undefined): r is Raw => r !== undefined;
+
+const pathToRaw = (
+  req = require
+) => (
+  path: string
+): Raw | undefined => {
+  let stripped;
+  try {
+    // tslint:disable-next-line:no-non-null-assertion
+    stripped = /\/(\w+)Rule\..*/.exec(path)![1];
+  } catch (error) {
+    console.log(path, error);
+    return;
+  }
+
+  // kebabCase from ladash is not compatible with tslint's name conversion
+  // so we need to remove the '-' sign before and after the 11
+  // that are added by kebabCase for all the
+  // react-a11y-* rules from tslint-microsoft-contrib
+  const ruleName = kebabCase(stripped).replace(/-11-/, '11');
+
+  const relativePath = path.replace(CWD, `.`);
+  const paths = relativePath.split(Path.sep);
+  const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
+  const isInNodeModules = indexOfSource > 0;
+  const sourcePath = isInNodeModules ?
+    paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
+  const source = Path.basename(isInNodeModules ? sourcePath : CWD);
+
+  // tslint:disable-next-line:non-literal-require
+  const {Rule} = req(path);
+  if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return;
+
+  return {
+    id: `${sourcePath}:${ruleName}`,
+    ruleName,
+    path: relativePath,
+    metadata: Rule.metadata,
+    source,
+    sourcePath
+  };
+};
+
+const rawToRuleData = ({metadata, ruleName, source, sourcePath, ...data}: Raw) => {
+  if (!metadata) {
+    console.log('no metadata found in rule', sourcePath, ruleName);
+  }
+  const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
+    .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
+
+  const meta: RuleMetadata = metadata ? metadata : {ruleName: ruleName};
+  if (!meta.options) {
+    delete meta.options;
+    delete meta.optionsDescription;
+    delete meta.optionExamples;
+  }
+  if (meta.ruleName !== ruleName) {
+    console.log(
+      'mismatching ruleName from file and metadata.ruleName:',
+      {ruleName, ['metadata.ruleName']: meta.ruleName}
+    );
+    // we expect this mismatch to be not by intention, so get rid of it
+    delete meta.ruleName;
+  }
+
+  return {
+    ruleName,
+    source,
+    ...data,
+    ...meta,
+    ...(documentation && {documentation}),
+    sourcePath
+  };
+};
 
 const rules: ReadonlyArray<RuleData> = glob
-// everything ending with Rule.js could be a tslint rule
+  // everything ending with Rule.js could be a tslint rule
   .sync('*Rule.js', {
     nodir: true, matchBase: true, absolute: true, ignore: [
       // there are some problematic exceptions
       '**/tslint/lib/language/**', '**/Rule.js'
     ]
   })
-  .map((path): Raw | undefined => {
-    let stripped;
-    try {
-      // tslint:disable-next-line:no-non-null-assertion
-      stripped = /\/(\w+)Rule\..*/.exec(path)![1];
-    } catch (error) {
-      console.log(path, error);
-      return;
-    }
+  .map(pathToRaw())
+  .filter(isRaw)
+  .map(rawToRuleData);
 
-    // kebabCase from ladash is not compatible with tslint's name conversion
-    // so we need to remove the '-' sign before and after the 11
-    // that are added by kebabCase for all the
-    // react-a11y-* rules from tslint-microsoft-contrib
-    const ruleName = kebabCase(stripped).replace(/-11-/, '11');
-
-    const relativePath = path.replace(CWD, `.`);
-    const paths = relativePath.split(Path.sep);
-    const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
-    const isInNodeModules = indexOfSource > 0;
-    const sourcePath = isInNodeModules ?
-      paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
-    const source = Path.basename(isInNodeModules ? sourcePath : CWD);
-
-    // tslint:disable-next-line:non-literal-require
-    const {Rule} = require(path);
-    if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return;
-
-    return {
-      id: ruleId({ruleName, sourcePath}),
-      ruleName,
-      path: relativePath,
-      metadata: Rule.metadata,
-      source,
-      sourcePath
-    };
-  })
-  .filter((r): r is Raw => r !== undefined)
-  .map(({metadata, ruleName, source, sourcePath, ...data}) => {
-    if (!metadata) {
-      console.log('no metadata found in rule', sourcePath, ruleName);
-    }
-    const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
-      .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
-
-    const meta: RuleMetadata = metadata ? metadata : {ruleName: ruleName};
-    if (!meta.options) {
-      delete meta.options;
-      delete meta.optionsDescription;
-      delete meta.optionExamples;
-    }
-    if (meta.ruleName !== ruleName) {
-      console.log(
-        'mismatching ruleName from file and metadata.ruleName:',
-        {ruleName, ['metadata.ruleName']: meta.ruleName}
-      );
-      // we expect this mismatch to be not by intention, so get rid of it
-      delete meta.ruleName;
-    }
-
-    return {
-      ruleName,
-      source,
-      ...data,
-      ...meta,
-      ...(documentation && {documentation}),
-      sourcePath
-    };
-  });
-
-const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<[string, string]> => {
+export type SourceRaw = [string, string];
+const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<SourceRaw> => {
   const unordered = uniqBy(rules, r => r.source)
-    .map<[string, string]>(r => [r.source, r.sourcePath]);
+    .map<SourceRaw>(r => [r.source, r.sourcePath]);
   // TODO sort by order defined in config files? (issue #2)
   const tslint = unordered.find(([source]) => source === TSLINT);
 
@@ -128,30 +133,28 @@ const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<[stri
 
 const sourcesOrder = createSourcesOrder(rules);
 
-const sources = sourcesOrder
-  .reduce<Dict<Source>>(
-    (sources, [source, sourcePath]) => {
-      const {
-        _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
-      } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
+const rawToSource = (sources: Dict<Source>, [source, sourcePath]: SourceRaw) => {
+  const {
+    _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
+  } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
 
-      sources[sourcePath] = {
-        _from,
-        _resolved,
-        bugs,
-        deprecated,
-        description,
-        docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
-        homepage,
-        main,
-        name: source,
-        path: sourcePath,
-        peerDependencies
-      };
-      return sources;
-    },
-    {}
-  );
+  sources[sourcePath] = {
+    _from,
+    _resolved,
+    bugs,
+    deprecated,
+    description,
+    docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
+    homepage,
+    main,
+    name: source,
+    path: sourcePath,
+    peerDependencies
+  };
+  return sources;
+};
+
+const sources = sourcesOrder.reduce<Dict<Source>>(rawToSource, {});
 
 const rulesAvailable = sortBy(
   rules, ['ruleName', (r: RuleData) => sourcesOrder.findIndex(([source]) => r.source === source)])
