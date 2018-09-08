@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy, sortedUniqBy, values, countBy, uniqBy} from 'lodash';
+import {kebabCase, sortBy, countBy, uniqBy} from 'lodash';
 import * as Path from 'path';
 import {IOptions, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
@@ -29,7 +29,7 @@ const CWD = process.cwd();
 
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
 const ruleId = (
-  {ruleName, sourcePath}: {ruleName: string; sourcePath: string}
+  {ruleName, sourcePath}: { ruleName: string; sourcePath: string }
 ) => `${sourcePath}:${ruleName}`;
 
 type Raw = ReportData & RuleName & {
@@ -114,15 +114,47 @@ const rules: ReadonlyArray<RuleData> = glob
     };
   });
 
-const sourcesOrder = [
-  TSLINT, // rules from tslint can not be overridden
-  ...uniqBy(rules, r => r.source)
-  .map(r => r.source)
-  .filter(s => s === TSLINT)
-];
+const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<[string, string]> => {
+  const unordered = uniqBy(rules, r => r.source)
+    .map<[string, string]>(r => [r.source, r.sourcePath]);
+  // TODO sort by order defined in config files? (issue #2)
+  const tslint = unordered.find(([source]) => source === TSLINT);
+
+  return tslint ? [
+    tslint, // rules from tslint take precedence
+    ...unordered.filter(it => it !== tslint)
+  ] : unordered;
+};
+
+const sourcesOrder = createSourcesOrder(rules);
+
+const sources = sourcesOrder
+  .reduce<Dict<Source>>(
+    (sources, [source, sourcePath]) => {
+      const {
+        _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
+      } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
+
+      sources[sourcePath] = {
+        _from,
+        _resolved,
+        bugs,
+        deprecated,
+        description,
+        docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
+        homepage,
+        main,
+        name: source,
+        path: sourcePath,
+        peerDependencies
+      };
+      return sources;
+    },
+    {}
+  );
 
 const rulesAvailable = sortBy(
-  rules, ['ruleName', (r: RuleData) => sourcesOrder.indexOf(r.source)])
+  rules, ['ruleName', (r: RuleData) => sourcesOrder.findIndex(([source]) => r.source === source)])
   .reduce<Dict<RuleData>>(
     (dict, rule) => {
       const {ruleName} = rule;
@@ -143,40 +175,12 @@ const rulesAvailable = sortBy(
     {}
   );
 
-const reportAvailable: Dict<ReportData> = {};
-const sources: Dict<Source> = {};
-sortedUniqBy<RuleData>(values(rulesAvailable), 'sourcePath')
-  .forEach(({source, sourcePath}) => {
-    const {
-      _from, _resolved, bugs, deprecated, description, homepage, main, peerDependencies
-    } = fs.readJsonSync(Path.join(sourcePath, 'package.json')) as PackageJson;
-
-    sources[sourcePath] = {
-      _from,
-      _resolved,
-      bugs,
-      deprecated,
-      description,
-      docs: source in DOCS ? DOCS[source as keyof typeof DOCS] : 'unknown',
-      homepage,
-      main,
-      name: source,
-      path: sourcePath,
-      peerDependencies
-    };
-  });
-
-sortBy(Object.keys(rulesAvailable)).forEach(key => {
-  const rule = {...rulesAvailable[key]};
-  const {ruleName, ...ruleData} = rule;
-  reportAvailable[key] = ruleData;
-});
 console.log(
   `${rules.length} rules available from ${Object.keys(sources).length} sources:`,
   JSON.stringify(Object.keys(sources), undefined, 2)
 );
 fs.writeJSONSync('tslint.report.sources.json', sources, {spaces: 2});
-fs.writeJSONSync('tslint.report.available.json', reportAvailable, {spaces: 2});
+fs.writeJSONSync('tslint.report.available.json', rulesAvailable, {spaces: 2});
 
 const configFile = Path.join(CWD, 'tslint.json');
 
