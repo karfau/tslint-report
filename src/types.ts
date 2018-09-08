@@ -7,10 +7,11 @@ export type RuleName = {
 
 export type ReportData = {
   documentation?: string;
+  id: string;
   path: string;
   source: string;
   sourcePath: string;
-  sameName?: string[];
+  sameName?: RuleData[]; // TODO generic type or RuleData?
 };
 
 export type RuleMetadata = Partial<IRuleMetadata & ExtendedMetadata> & RuleName;

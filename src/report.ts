@@ -1,26 +1,30 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy, sortedUniqBy, values, countBy} from 'lodash';
+import {kebabCase, sortBy, sortedUniqBy, values, countBy, uniqBy} from 'lodash';
 import * as Path from 'path';
 import {IOptions, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
 import {DEPRECATED} from './ExtendedMetadata';
-import {ActiveRule, Dict, PackageJson, ReportData, RuleData, RuleMetadata, Source} from './types';
+import {
+  ActiveRule,
+  Dict,
+  PackageJson,
+  ReportData,
+  RuleData,
+  RuleMetadata,
+  RuleName,
+  Source
+} from './types';
 
 const RULE_PATTERN = '{RULE}';
 
-const DOCS = {
-  tslint: `https://palantir.github.io/tslint/rules/${RULE_PATTERN}`,
-  'tslint-eslint-rules': `https://eslint.org/docs/rules/${RULE_PATTERN}`,
-  'tslint-microsoft-contrib':
-    'https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules',
-  'tslint-react': 'https://github.com/palantir/tslint-react#rules',
-  'bm-tslint-rules': 'https://github.com/bettermarks/bm-tslint-rules#rules'
-};
+// tslint:disable-next-line:no-var-requires
+const DOCS: Dict<string> = require('../rules.docs.json');
 
 const NODE_MODULES = 'node_modules';
+const TSLINT = `tslint`;
 const CWD = process.cwd();
 
 // const ruleSets = walk(process.cwd(), {nodir: true, filter: findRuleSets}).map(item => item.path);
@@ -28,19 +32,26 @@ const ruleId = (
   {ruleName, sourcePath}: {ruleName: string; sourcePath: string}
 ) => `${sourcePath}:${ruleName}`;
 
-const rules = glob.sync('*Rule.js', {
-  nodir: true, matchBase: true, absolute: true, ignore: ['**/tslint/lib/language/**', '**/Rule.js']
-});
-const rulesAvailable = rules.reduce<Dict<RuleData>>(
-  // tslint:disable-next-line:cyclomatic-complexity
-  (dict, path) => {
+type Raw = ReportData & RuleName & {
+  metadata?: any;
+};
+
+const rules: ReadonlyArray<RuleData> = glob
+// everything ending with Rule.js could be a tslint rule
+  .sync('*Rule.js', {
+    nodir: true, matchBase: true, absolute: true, ignore: [
+      // there are some problematic exceptions
+      '**/tslint/lib/language/**', '**/Rule.js'
+    ]
+  })
+  .map((path): Raw | undefined => {
     let stripped;
     try {
       // tslint:disable-next-line:no-non-null-assertion
       stripped = /\/(\w+)Rule\..*/.exec(path)![1];
     } catch (error) {
       console.log(path, error);
-      return dict;
+      return;
     }
 
     // kebabCase from ladash is not compatible with tslint's name conversion
@@ -52,65 +63,85 @@ const rulesAvailable = rules.reduce<Dict<RuleData>>(
     const relativePath = path.replace(CWD, `.`);
     const paths = relativePath.split(Path.sep);
     const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
-    const inInNodeModules = indexOfSource > 0;
-    const sourcePath = inInNodeModules ?
+    const isInNodeModules = indexOfSource > 0;
+    const sourcePath = isInNodeModules ?
       paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
-    const source = Path.basename(inInNodeModules ? sourcePath : CWD);
+    const source = Path.basename(isInNodeModules ? sourcePath : CWD);
 
     // tslint:disable-next-line:non-literal-require
     const {Rule} = require(path);
-    if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return dict;
+    if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return;
 
-    if (!Rule.metadata) {
+    return {
+      id: ruleId({ruleName, sourcePath}),
+      ruleName,
+      path: relativePath,
+      metadata: Rule.metadata,
+      source,
+      sourcePath
+    };
+  })
+  .filter((r): r is Raw => r !== undefined)
+  .map(({metadata, ruleName, source, sourcePath, ...data}) => {
+    if (!metadata) {
       console.log('no metadata found in rule', sourcePath, ruleName);
     }
     const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
       .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
 
-    const metadata: RuleMetadata = Rule.metadata ? Rule.metadata : {ruleName: ruleName};
-    if (!metadata.options) {
-      delete metadata.options;
-      delete metadata.optionsDescription;
-      delete metadata.optionExamples;
+    const meta: RuleMetadata = metadata ? metadata : {ruleName: ruleName};
+    if (!meta.options) {
+      delete meta.options;
+      delete meta.optionsDescription;
+      delete meta.optionExamples;
+    }
+    if (meta.ruleName !== ruleName) {
+      console.log(
+        'mismatching ruleName from file and metadata.ruleName:',
+        {ruleName, ['metadata.ruleName']: meta.ruleName}
+      );
+      // we expect this mismatch to be not by intention, so get rid of it
+      delete meta.ruleName;
     }
 
-    const data: RuleData = {
-      ...metadata,
-      ...(documentation && {documentation}),
-      path: relativePath,
+    return {
+      ruleName,
       source,
+      ...data,
+      ...meta,
+      ...(documentation && {documentation}),
       sourcePath
     };
+  });
 
-    const existing = dict[ruleName];
-    if (existing) {
-      // there is another rule with the same name
-      const currentId = ruleId(data);
-      const existingId = ruleId(existing);
-      if (source === 'tslint') {
-        // the current one wins because custom rules can not override tslint rules
-        data.sameName = [...(existing.sameName ? existing.sameName : []), existingId];
-        dict[existingId] = existing;
-        dict[ruleName] = data;
-      } else {
-        // non deterministic which one wins
-        if (existing.source !== 'tslint') {
+const sourcesOrder = [
+  TSLINT, // rules from tslint can not be overridden
+  ...uniqBy(rules, r => r.source)
+  .map(r => r.source)
+  .filter(s => s === TSLINT)
+];
+
+const rulesAvailable = sortBy(
+  rules, ['ruleName', (r: RuleData) => sourcesOrder.indexOf(r.source)])
+  .reduce<Dict<RuleData>>(
+    (dict, rule) => {
+      const {ruleName} = rule;
+
+      const existing = dict[ruleName];
+      if (existing) {
+        if (existing.source !== TSLINT && !existing.sameName) {
           console.log(
             `rule name '${ruleName}' available from different sources (first extend wins)`
           );
         }
-        // we keep the existing one in the dict, point to the conflict
-        // and only store the current one under its ID
-        existing.sameName = [...(existing.sameName ? existing.sameName : []), currentId];
-        dict[currentId] = data;
+        existing.sameName = [...(existing.sameName ? existing.sameName : []), rule];
+      } else {
+        dict[ruleName] = rule;
       }
-    } else {
-      dict[ruleName] = data;
-    }
-    return dict;
-  },
-  {}
-);
+      return dict;
+    },
+    {}
+  );
 
 const reportAvailable: Dict<ReportData> = {};
 const sources: Dict<Source> = {};
@@ -135,8 +166,6 @@ sortedUniqBy<RuleData>(values(rulesAvailable), 'sourcePath')
     };
   });
 
-// reportAvailable.$sources = sources;
-
 sortBy(Object.keys(rulesAvailable)).forEach(key => {
   const rule = {...rulesAvailable[key]};
   const {ruleName, ...ruleData} = rule;
@@ -149,8 +178,8 @@ console.log(
 fs.writeJSONSync('tslint.report.sources.json', sources, {spaces: 2});
 fs.writeJSONSync('tslint.report.available.json', reportAvailable, {spaces: 2});
 
-// const tslintJson = findConfiguration('tslint.json').results;
 const configFile = Path.join(CWD, 'tslint.json');
+
 const rulesFromConfig = loadConfigurationFromPath(configFile, configFile);
 const namedRules: IOptions[] = [];
 rulesFromConfig.rules.forEach((option, key) => {
@@ -192,7 +221,7 @@ sortBy(loadedRules, 'ruleName').forEach((rule) => {
     ...(ruleArguments && ruleArguments.length && {ruleArguments}),
     ruleSeverity,
     source,
-    ...(source !== 'tslint' && sameName && sameName.length && {sameName})
+    ...(source !== TSLINT && sameName && {sameName: sameName.map(r => r.id)})
   };
 });
 
