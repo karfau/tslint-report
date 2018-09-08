@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {kebabCase, sortBy, countBy, uniqBy} from 'lodash';
+import {kebabCase, sortBy, countBy, uniqBy, values} from 'lodash';
 import * as Path from 'path';
 import {IOptions, loadRules, Rules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
@@ -190,50 +190,64 @@ rulesFromConfig.rules.forEach((option, key) => {
   // console.log(key, JSON.stringify(option));
   namedRules.push({...(option as IOptions), ruleName: key});
 });
-const loadedRules = loadRules(namedRules, rulesFromConfig.rulesDirectory);
-const report: Dict<ActiveRule> = {};
+const loadedRules = sortBy(loadRules(namedRules, rulesFromConfig.rulesDirectory), 'ruleName');
 
-// tslint:disable-next-line:cyclomatic-complexity
-sortBy(loadedRules, 'ruleName').forEach((rule) => {
-  const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
-  if (!(ruleName in rulesAvailable)) {
-    report[ruleName] = {
-      ruleArguments,
-      ruleSeverity
-    };
-    console.log('Rule not found as available', ruleName);
-    return;
+// sometimes deprecation message is an empty string, which still means deprecated,
+// tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
+const deprecation = (
+  deprecationMessage: string | undefined, group: string | undefined
+): string | boolean => {
+  if (deprecationMessage !== undefined) {
+    return deprecationMessage || true;
   }
-  const ruleData = rulesAvailable[ruleName];
-  const {
-    deprecationMessage, documentation, hasFix, group, source, sameName, type
-  } = ruleData;
+  return group === DEPRECATED;
+};
 
-  // sometimes deprecation message is an empty string, which still means deprecated,
-  // tslint-microsoft-contrib sets the group metadata to 'Deprecated' instead
-  const deprecated = deprecationMessage !== undefined || (group && group === DEPRECATED);
-  if (deprecated) {
+const report = loadedRules.reduce<Dict<ActiveRule>>(
+  (report, rule) => {
+    const {ruleName, ruleArguments, ruleSeverity} = rule.getOptions();
+    const ruleData = rulesAvailable[ruleName];
+    if (!ruleData) {
+      console.log('Rule not found as available', ruleName);
+      report[ruleName] = {
+        ruleName,
+        ruleArguments,
+        ruleSeverity
+      };
+    } else {
+      const {
+        deprecationMessage, documentation, hasFix, group, source, sameName, type
+      } = ruleData;
+      const deprecated = deprecation(deprecationMessage, group);
+      report[ruleName] = {
+        ruleName,
+        ruleSeverity,
+        source,
+        ...(deprecated && {deprecated}),
+        ...(documentation && {documentation}),
+        ...(hasFix && {hasFix}),
+        ...(group && {group}),
+        ...(type && {type}),
+        ...(ruleArguments && {ruleArguments}),
+        ...(sameName && {sameName: sameName.map(r => r.id)})
+      };
+    }
+    return report;
+  },
+  {}
+);
+
+values(report)
+  .filter(r => r.deprecated)
+  .forEach(({ruleName, source}) => {
     console.warn(`WARNING: The deprecated rule '${ruleName}' from '${source}' is active.`);
-  }
-
-  report[ruleName] = {
-    ...(deprecated && {deprecated: deprecationMessage || true}),
-    ...(documentation && {documentation}),
-    ...(hasFix && {hasFix}),
-    ...(group && {group}),
-    ...(type && {type}),
-    ...(ruleArguments && ruleArguments.length && {ruleArguments}),
-    ruleSeverity,
-    source,
-    ...(source !== TSLINT && sameName && {sameName: sameName.map(r => r.id)})
-  };
-});
+  });
 
 fs.writeJSONSync('tslint.report.active.json', report, {spaces: 2});
 console.log('active rules:', loadedRules.length);
-const reportBy = (key: keyof ActiveRule) =>
-  console.log(`by ${key}:\n${
-  JSON.stringify(countBy(report, key), null, 2).replace(/[{}]/g, '')}`);
 
+const reportBy = (key: keyof ActiveRule) => console.log(
+  `by ${key}:\n${JSON.stringify(countBy(report, key), null, 2).replace(/[{}]/g, '')}`
+);
 reportBy('type');
 reportBy('group');

@@ -40,7 +40,7 @@ export type Source = PackageJson & {
 
 export type Dict<T> = {[key: string]: T};
 
-export type ActiveRule = {
+export type ActiveRule = RuleName & {
   deprecated?: string | boolean;
   documentation?: string;
   hasFix?: boolean;
