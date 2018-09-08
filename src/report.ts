@@ -1,120 +1,28 @@
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 
-import {countBy, kebabCase, sortBy, uniqBy, values} from 'lodash';
+import {countBy, sortBy, uniqBy, values} from 'lodash';
 import * as Path from 'path';
-import {IOptions, IRule, loadRules, Rules} from 'tslint';
+import {IOptions, IRule, loadRules} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
+
+import {DOCS, TSLINT} from './constants';
 import {DEPRECATED} from './ExtendedMetadata';
-import {
-  ActiveRule,
-  Dict,
-  PackageJson,
-  ReportData,
-  RuleData,
-  RuleMetadata,
-  RuleName,
-  Source
-} from './types';
+import {fsToRuleData, isRuleFromFS, pathToRuleFromFS} from './RuleFromFS';
+import {ActiveRule, Dict, PackageJson, RuleData, Source} from './types';
 
-const RULE_PATTERN = '{RULE}';
-
-// tslint:disable-next-line:no-var-requires
-const DOCS: Dict<string> = require('../rules.docs.json');
-
-const NODE_MODULES = 'node_modules';
-const TSLINT = `tslint`;
 const CWD = process.cwd();
-
-type RuleFromFS = ReportData & RuleName & {
-  metadata?: any;
-};
-const isRuleFromFS = (r: RuleFromFS | undefined): r is RuleFromFS => r !== undefined;
-
-const pathToRuleFromFS = (
-  req = require
-) => (
-  path: string
-): RuleFromFS | undefined => {
-  let stripped;
-  try {
-    // tslint:disable-next-line:no-non-null-assertion
-    stripped = /\/(\w+)Rule\..*/.exec(path)![1];
-  } catch (error) {
-    console.log(path, error);
-    return;
-  }
-
-  // kebabCase from ladash is not compatible with tslint's name conversion
-  // so we need to remove the '-' sign before and after the 11
-  // that are added by kebabCase for all the
-  // react-a11y-* rules from tslint-microsoft-contrib
-  const ruleName = kebabCase(stripped).replace(/-11-/, '11');
-
-  const relativePath = path.replace(CWD, `.`);
-  const paths = relativePath.split(Path.sep);
-  const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
-  const isInNodeModules = indexOfSource > 0;
-  const sourcePath = isInNodeModules ?
-    paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
-  const source = Path.basename(isInNodeModules ? sourcePath : CWD);
-
-  // tslint:disable-next-line:non-literal-require
-  const {Rule} = req(path);
-  if (!(Rule && Rule instanceof Rules.AbstractRule.constructor)) return;
-
-  return {
-    ruleName,
-    source,
-    path: relativePath,
-    metadata: Rule.metadata,
-    sourcePath,
-    id: `${sourcePath}:${ruleName}`
-  };
-};
-
-const fsToRuleData = ({metadata, ruleName, source, sourcePath, ...data}: RuleFromFS) => {
-  if (!metadata) {
-    console.log('no metadata found in rule', sourcePath, ruleName);
-  }
-  const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
-    .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
-
-  const meta: RuleMetadata = metadata ? metadata : {ruleName: ruleName};
-  if (!meta.options) {
-    delete meta.options;
-    delete meta.optionsDescription;
-    delete meta.optionExamples;
-  }
-  if (meta.ruleName !== ruleName) {
-    console.log(
-      'mismatching ruleName from file and metadata.ruleName:',
-      {ruleName, ['metadata.ruleName']: meta.ruleName}
-    );
-    // we expect this mismatch to be not by intention, so get rid of it
-    delete meta.ruleName;
-  }
-
-  return {
-    ruleName,
-    source,
-    ...data,
-    ...meta,
-    ...(documentation && {documentation}),
-    sourcePath
-  };
-};
 
 const rules: ReadonlyArray<RuleData> = glob
   // everything ending with Rule.js could be a tslint rule
   .sync('*Rule.js', {
-    nodir: true, matchBase: true, absolute: true, ignore: [
+    cwd: CWD, nodir: true, matchBase: true, absolute: true, ignore: [
       // there are some problematic exceptions
       '**/tslint/lib/language/**', '**/Rule.js'
     ]
   })
-  .map(pathToRuleFromFS())
+  .map(pathToRuleFromFS(CWD))
   .filter(isRuleFromFS)
   .map(fsToRuleData);
 
@@ -133,7 +41,7 @@ const createSourcesOrder = (rules: ReadonlyArray<RuleData>): ReadonlyArray<Sourc
 
 const sourcesOrder = createSourcesOrder(rules);
 
-const rawToSources = (
+const tupleToSources = (
   {readJsonSync}: Pick<typeof fs, 'readJsonSync'> = fs
 ) => (
   sources: Dict<Source>, [source, sourcePath]: SourceTuple
@@ -158,7 +66,7 @@ const rawToSources = (
   return sources;
 };
 
-const sources = sourcesOrder.reduce<Dict<Source>>(rawToSources(), {});
+const sources = sourcesOrder.reduce<Dict<Source>>(tupleToSources(), {});
 
 const rulesAvailable = sortBy(
   rules, ['ruleName', (r: RuleData) => sourcesOrder.findIndex(([source]) => r.source === source)])
