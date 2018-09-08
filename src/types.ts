@@ -1,4 +1,4 @@
-import {IRuleMetadata, RuleSeverity} from 'tslint';
+import {IRuleMetadata} from 'tslint';
 import {ExtendedMetadata} from './ExtendedMetadata';
 
 export type RuleName = {
@@ -40,14 +40,3 @@ export type Source = PackageJson & {
 
 export type Dict<T> = {[key: string]: T};
 
-export type ActiveRule = RuleName & {
-  deprecated?: string | boolean;
-  documentation?: string;
-  hasFix?: boolean;
-  ruleArguments?: any[];
-  ruleSeverity: RuleSeverity;
-  sameName?: string[];
-  source?: string;
-  group?: string;
-  type?: string;
-};

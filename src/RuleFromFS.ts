@@ -9,7 +9,9 @@ import {ReportData, RuleMetadata, RuleName} from './types';
 type RuleFromFS = ReportData & RuleName & {
   metadata?: any;
 };
+
 export const isRuleFromFS = (r: RuleFromFS | undefined): r is RuleFromFS => r !== undefined;
+
 export const pathToRuleFromFS = (
   baseDir: string, req = require
 ) => (
