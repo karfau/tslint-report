@@ -1,4 +1,13 @@
 "use strict";
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) if (e.indexOf(p[i]) < 0)
+            t[p[i]] = s[p[i]];
+    return t;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const lodash_1 = require("lodash");
 const Path = require("path");
@@ -47,16 +56,14 @@ exports.fsToRuleData = ({ id, metadata, path, ruleName, source, sourcePath }) =>
     }
     const documentation = (source in constants_1.DOCS ? constants_1.DOCS[source] : '')
         .replace(new RegExp(constants_1.RULE_PATTERN, 'g'), ruleName);
-    const meta = metadata ? metadata : { ruleName: ruleName };
+    const _a = metadata ? metadata : {}, { ruleName: metaRuleName } = _a, meta = __rest(_a, ["ruleName"]);
     if (!meta.options) {
         delete meta.options;
         delete meta.optionsDescription;
         delete meta.optionExamples;
     }
-    if (meta.ruleName !== ruleName) {
-        console.log('mismatching ruleName from file and metadata.ruleName:', { ruleName, ['metadata.ruleName']: meta.ruleName });
-        // we expect this mismatch to be not by intention, so get rid of it
-        delete meta.ruleName;
+    if (metaRuleName && metaRuleName !== ruleName) {
+        console.log('mismatching ruleName from file and metadata.ruleName:', { ruleName, ['metadata.ruleName']: metaRuleName });
     }
     return Object.assign({ id }, meta, (documentation && { documentation }), { path,
         ruleName,

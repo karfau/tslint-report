@@ -63,19 +63,17 @@ export const fsToRuleData = (
   const documentation = (source in DOCS ? DOCS[source as keyof typeof DOCS] : '')
     .replace(new RegExp(RULE_PATTERN, 'g'), ruleName);
 
-  const meta: RuleMetadata = metadata ? metadata : {ruleName: ruleName};
+  const {ruleName: metaRuleName, ...meta}: RuleMetadata = metadata ? metadata : {};
   if (!meta.options) {
     delete meta.options;
     delete meta.optionsDescription;
     delete meta.optionExamples;
   }
-  if (meta.ruleName !== ruleName) {
+  if (metaRuleName && metaRuleName !== ruleName) {
     console.log(
       'mismatching ruleName from file and metadata.ruleName:',
-      {ruleName, ['metadata.ruleName']: meta.ruleName}
+      {ruleName, ['metadata.ruleName']: metaRuleName}
     );
-    // we expect this mismatch to be not by intention, so get rid of it
-    delete meta.ruleName;
   }
 
   return {
