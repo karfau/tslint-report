@@ -1,0 +1,7 @@
+{
+  "tslint": "https://palantir.github.io/tslint/rules/{RULE}",
+  "tslint-eslint-rules": "https://eslint.org/docs/rules/{RULE}",
+  "tslint-microsoft-contrib": "https://github.com/Microsoft/tslint-microsoft-contrib#supported-rules",
+  "tslint-react": "https://github.com/palantir/tslint-react#rules",
+  "bm-tslint-rules": "https://github.com/bettermarks/bm-tslint-rules#rules"
+}

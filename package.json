@@ -1,13 +1,14 @@
 {
   "name": "tslint-report",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "This is a utility for maintaining a tslint rule set.",
   "repository": "https://github.com/karfau/tslint-report",
   "bugs": "https://github.com/karfau/tslint-report/issues",
   "main": "dist/report.js",
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "rules.docs.json"
   ],
   "bin": {
     "tslint-report": "bin/tslint-report"
