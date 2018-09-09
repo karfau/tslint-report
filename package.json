@@ -7,7 +7,8 @@
   "main": "dist/report.js",
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "rules.docs.json"
   ],
   "bin": {
     "tslint-report": "bin/tslint-report"
