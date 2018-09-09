@@ -1,4 +1,4 @@
-import {sortBy} from 'lodash';
+import {sortBy, omitBy, isEmpty} from 'lodash';
 import {IOptions, IRule, loadRules, RuleSeverity} from 'tslint';
 // tslint:disable-next-line:no-submodule-imports
 import {loadConfigurationFromPath} from 'tslint/lib/configuration';
@@ -65,16 +65,21 @@ export const loadedToActiveRules = (
     } = ruleData;
     const deprecated = deprecation(deprecationMessage, group);
     report[ruleName] = {
-      ruleName,
-      ruleSeverity,
-      source,
       ...(deprecated && {deprecated}),
       ...(documentation && {documentation}),
       ...(hasFix && {hasFix}),
-      ...(group && {group}),
-      ...(type && {type}),
-      ...(ruleArguments && {ruleArguments}),
-      ...(sameName && {sameName: sameName.map(r => r.id)})
+      ruleSeverity,
+      ...omitBy(
+        {
+          group,
+          type,
+          ruleArguments,
+          sameName: sameName ? sameName.map(r => r.id) : []
+        },
+        isEmpty
+      ),
+      ruleName,
+      source
     };
   }
   return report;

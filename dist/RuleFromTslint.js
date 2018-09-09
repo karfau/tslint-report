@@ -38,9 +38,13 @@ exports.loadedToActiveRules = (rulesAvailable) => (report, rule) => {
     else {
         const { deprecationMessage, documentation, hasFix, group, source, sameName, type } = ruleData;
         const deprecated = deprecation(deprecationMessage, group);
-        report[ruleName] = Object.assign({ ruleName,
-            ruleSeverity,
-            source }, (deprecated && { deprecated }), (documentation && { documentation }), (hasFix && { hasFix }), (group && { group }), (type && { type }), (ruleArguments && { ruleArguments }), (sameName && { sameName: sameName.map(r => r.id) }));
+        report[ruleName] = Object.assign({}, (deprecated && { deprecated }), (documentation && { documentation }), (hasFix && { hasFix }), { ruleSeverity }, lodash_1.omitBy({
+            group,
+            type,
+            ruleArguments,
+            sameName: sameName ? sameName.map(r => r.id) : []
+        }, lodash_1.isEmpty), { ruleName,
+            source });
     }
     return report;
 };
