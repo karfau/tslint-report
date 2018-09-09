@@ -45,16 +45,18 @@ export const pathToRuleFromFS = (
   if (!(Rule && Rule instanceof AbstractRule.constructor)) return;
 
   return {
+    id: `${sourcePath}:${ruleName}`,
+    metadata: Rule.metadata,
+    path: relativePath,
     ruleName,
     source,
-    path: relativePath,
-    metadata: Rule.metadata,
-    sourcePath,
-    id: `${sourcePath}:${ruleName}`
+    sourcePath
   };
 };
 
-export const fsToRuleData = ({metadata, ruleName, source, sourcePath, ...data}: RuleFromFS) => {
+export const fsToRuleData = (
+  {id, metadata, path, ruleName, source, sourcePath}: RuleFromFS
+) => {
   if (!metadata) {
     console.log('no metadata found in rule', sourcePath, ruleName);
   }
@@ -77,11 +79,12 @@ export const fsToRuleData = ({metadata, ruleName, source, sourcePath, ...data}: 
   }
 
   return {
-    ruleName,
-    source,
-    ...data,
+    id,
     ...meta,
     ...(documentation && {documentation}),
+    path,
+    ruleName,
+    source,
     sourcePath
   };
 };

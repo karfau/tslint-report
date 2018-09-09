@@ -1,13 +1,4 @@
 "use strict";
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) if (e.indexOf(p[i]) < 0)
-            t[p[i]] = s[p[i]];
-    return t;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const lodash_1 = require("lodash");
 const Path = require("path");
@@ -42,16 +33,15 @@ exports.pathToRuleFromFS = (baseDir, req = require) => (path) => {
     if (!(Rule && Rule instanceof rules_1.AbstractRule.constructor))
         return;
     return {
+        id: `${sourcePath}:${ruleName}`,
+        metadata: Rule.metadata,
+        path: relativePath,
         ruleName,
         source,
-        path: relativePath,
-        metadata: Rule.metadata,
-        sourcePath,
-        id: `${sourcePath}:${ruleName}`
+        sourcePath
     };
 };
-exports.fsToRuleData = (_a) => {
-    var { metadata, ruleName, source, sourcePath } = _a, data = __rest(_a, ["metadata", "ruleName", "source", "sourcePath"]);
+exports.fsToRuleData = ({ id, metadata, path, ruleName, source, sourcePath }) => {
     if (!metadata) {
         console.log('no metadata found in rule', sourcePath, ruleName);
     }
@@ -68,6 +58,8 @@ exports.fsToRuleData = (_a) => {
         // we expect this mismatch to be not by intention, so get rid of it
         delete meta.ruleName;
     }
-    return Object.assign({ ruleName,
-        source }, data, meta, (documentation && { documentation }), { sourcePath });
+    return Object.assign({ id }, meta, (documentation && { documentation }), { path,
+        ruleName,
+        source,
+        sourcePath });
 };
