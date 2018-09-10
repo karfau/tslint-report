@@ -4,6 +4,7 @@
     ],
     "rules": {
       "curly": false,
-      "no-single-line-block-comment": false
+      "no-single-line-block-comment": false,
+      "no-implicit-dependencies": false
     }
 }

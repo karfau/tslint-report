@@ -17,22 +17,26 @@ export const pathToRuleFromFS = (
 ) => (
   path: string
 ): RuleFromFS | undefined => {
-  let stripped;
+
+  let stripped, metadata;
   try {
+    const {Rule} = req(path);
+    if (!(Rule && Rule instanceof AbstractRule.constructor)) return;
+    metadata = Rule.metadata;
     // tslint:disable-next-line:no-non-null-assertion
     stripped = /\/(\w+)Rule\..*/.exec(path)![1];
   } catch (error) {
-    console.log(path, error);
+    console.warn('no tslint rule detected @', path, error);
     return;
   }
 
   // kebabCase from ladash is not compatible with tslint's name conversion
-  // so we need to remove the '-' sign before and after the 11
-  // that are added by kebabCase for all the
-  // react-a11y-* rules from tslint-microsoft-contrib
-  const ruleName = kebabCase(stripped).replace(/-11-/, '11');
+  // so we need to remove '-' before and after numbers
+  // examples: react-a11y-* rules from tslint-microsoft-contrib
+  const ruleName = kebabCase(stripped).replace(/-(\d+)-/, '$1');
 
   const relativePath = path.replace(baseDir, `.`);
+
   const paths = relativePath.split(Path.sep);
   const indexOfSource = paths.lastIndexOf(NODE_MODULES) + 1;
   const isInNodeModules = indexOfSource > 0;
@@ -40,13 +44,9 @@ export const pathToRuleFromFS = (
     paths.slice(0, indexOfSource + 1).join(Path.sep) : '.';
   const source = Path.basename(isInNodeModules ? sourcePath : baseDir);
 
-  // tslint:disable-next-line:non-literal-require
-  const {Rule} = req(path);
-  if (!(Rule && Rule instanceof AbstractRule.constructor)) return;
-
   return {
     id: `${sourcePath}:${ruleName}`,
-    metadata: Rule.metadata,
+    metadata,
     path: relativePath,
     ruleName,
     source,

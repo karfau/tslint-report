@@ -22,7 +22,8 @@
     "preversion": "npm run build && npm run test",
     "check": "npx npm-check -u --skip-unused",
     "build": "tsc -p tsconfig.json",
-    "test": "echo \"NO TESTS YET!\"",
+    "test": "mocha mocha --opts mocha.opts",
+    "test:auto": "mocha mocha --opts mocha.opts --watch",
     "tslint": "tslint -c tslint.json --project tsconfig.json -t stylish",
     "start": "ts-node src/report.ts"
   },
@@ -38,12 +39,21 @@
     "glob": "^7.1.2"
   },
   "devDependencies": {
+    "@types/chai": "4.1.4",
     "@types/fs-extra": "5.0.4",
     "@types/glob": "5.0.35",
     "@types/lodash": "4.14.116",
+    "@types/mocha": "5.2.5",
     "@types/node": "10.9.4",
+    "@types/sinon": "5.0.2",
+    "@types/sinon-chai": "^3.2.0",
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#41e38d2",
+    "chai": "4.1.2",
+    "mocha": "5.2.0",
+    "sinon": "6.2.0",
+    "sinon-chai": "latest",
     "ts-node": "7.0.1",
+    "tsconfig-paths": "^3.5.0",
     "typescript": "3.0.3"
   },
   "peerDependencies": {
