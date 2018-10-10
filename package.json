@@ -40,7 +40,7 @@
   "devDependencies": {
     "@types/fs-extra": "5.0.4",
     "@types/glob": "5.0.36",
-    "@types/lodash": "4.14.116",
+    "@types/lodash": "4.14.117",
     "@types/node": "10.11.7",
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#41e38d2",
     "ts-node": "7.0.1",
