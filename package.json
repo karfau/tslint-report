@@ -42,7 +42,7 @@
     "@types/glob": "5.0.36",
     "@types/lodash": "4.14.117",
     "@types/node": "10.12.0",
-    "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#41e38d2",
+    "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#b6c1726",
     "ts-node": "7.0.1",
     "typescript": "3.1.3"
   },
