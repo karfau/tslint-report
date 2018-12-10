@@ -69,7 +69,9 @@ fs.writeJSONSync('tslint.report.active.json', report, {spaces: 2});
 console.log('active rules:', loadedRules.length);
 
 const reportBy = (key: keyof ActiveRule) => console.log(
-  `by ${key}:\n${JSON.stringify(countBy(report, key), null, 2).replace(/[{}]/g, '')}`
+  `by ${key}:\n${JSON.stringify(
+    countBy(report, key), undefined, 2
+  ).replace(/[{}]/g, '')}`
 );
 reportBy('type');
 reportBy('group');
