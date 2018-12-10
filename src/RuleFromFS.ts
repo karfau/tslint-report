@@ -10,6 +10,9 @@ type RuleFromFS = ReportData & RuleName & {
   metadata?: any;
 };
 
+const extendsAbstractRule = (Rule: unknown): Rule is typeof AbstractRule =>
+  Rule && Rule instanceof AbstractRule.constructor;
+
 export const isRuleFromFS = (r: RuleFromFS | undefined): r is RuleFromFS => r !== undefined;
 
 export const pathToRuleFromFS = (
@@ -42,7 +45,7 @@ export const pathToRuleFromFS = (
 
   // tslint:disable-next-line:non-literal-require
   const {Rule} = req(path);
-  if (!(Rule && Rule instanceof AbstractRule.constructor)) return;
+  if (!extendsAbstractRule(Rule)) return;
 
   return {
     id: `${sourcePath}:${ruleName}`,

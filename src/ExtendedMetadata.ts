@@ -1,9 +1,8 @@
 import * as Lint from 'tslint';
 
-// https://github.com/karfau/tslint-microsoft-contrib/blob/master/src/utils/ExtendedMetadata.ts
-
 /**
  * Additional information that each rule must specify.
+ * @see https://github.com/karfau/tslint-microsoft-contrib/blob/master/src/utils/ExtendedMetadata.ts
  */
 export interface ExtendedMetadata extends Lint.IRuleMetadata {
   issueClass: IssueClass;

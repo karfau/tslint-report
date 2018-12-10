@@ -14,6 +14,7 @@ const Path = require("path");
 // tslint:disable-next-line:no-submodule-imports
 const rules_1 = require("tslint/lib/rules");
 const constants_1 = require("./constants");
+const extendsAbstractRule = (Rule) => Rule && Rule instanceof rules_1.AbstractRule.constructor;
 exports.isRuleFromFS = (r) => r !== undefined;
 exports.pathToRuleFromFS = (baseDir, req = require) => (path) => {
     let stripped;
@@ -39,7 +40,7 @@ exports.pathToRuleFromFS = (baseDir, req = require) => (path) => {
     const source = Path.basename(isInNodeModules ? sourcePath : baseDir);
     // tslint:disable-next-line:non-literal-require
     const { Rule } = req(path);
-    if (!(Rule && Rule instanceof rules_1.AbstractRule.constructor))
+    if (!extendsAbstractRule(Rule))
         return;
     return {
         id: `${sourcePath}:${ruleName}`,
