@@ -48,6 +48,6 @@ lodash_1.values(report)
 });
 fs.writeJSONSync('tslint.report.active.json', report, { spaces: 2 });
 console.log('active rules:', loadedRules.length);
-const reportBy = (key) => console.log(`by ${key}:\n${JSON.stringify(lodash_1.countBy(report, key), null, 2).replace(/[{}]/g, '')}`);
+const reportBy = (key) => console.log(`by ${key}:\n${JSON.stringify(lodash_1.countBy(report, key), undefined, 2).replace(/[{}]/g, '')}`);
 reportBy('type');
 reportBy('group');
