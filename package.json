@@ -1,6 +1,6 @@
 {
   "name": "tslint-report",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "This is a utility for maintaining a tslint rule set.",
   "repository": "https://github.com/karfau/tslint-report",
   "bugs": "https://github.com/karfau/tslint-report/issues",
@@ -33,9 +33,9 @@
   "author": "Christian Bewernitz",
   "license": "MIT",
   "dependencies": {
-    "lodash": "^4.17.5",
-    "fs-extra": "^7.0.0",
-    "glob": "^7.1.2"
+    "lodash": "^4.17.11",
+    "fs-extra": "^7.0.1",
+    "glob": "^7.1.3"
   },
   "devDependencies": {
     "@types/fs-extra": "5.0.5",
