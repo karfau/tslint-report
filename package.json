@@ -1,6 +1,6 @@
 {
   "name": "tslint-report",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "This is a utility for maintaining a tslint rule set.",
   "repository": "https://github.com/karfau/tslint-report",
   "bugs": "https://github.com/karfau/tslint-report/issues",
@@ -18,7 +18,7 @@
     "npm": ">=5.2.0"
   },
   "scripts": {
-    "preinstall": "npx check-node-version --package",
+    "preinstall": "npx check-node-version@3.3.0 --package",
     "preversion": "npm run build && npm run test",
     "check": "npx npm-check -u --skip-unused",
     "build": "tsc -p tsconfig.json",
@@ -42,7 +42,7 @@
     "@types/glob": "5.0.36",
     "@types/lodash": "4.14.123",
     "@types/node": "10.14.3",
-    "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#0d880e4",
+    "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#v0.7.23",
     "ts-node": "7.0.1",
     "typescript": "3.3.4000"
   },
