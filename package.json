@@ -44,7 +44,7 @@
     "@types/node": "10.14.13",
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#v0.7.31",
     "ts-node": "7.0.1",
-    "typescript": "3.3.4000"
+    "typescript": "3.5.3"
   },
   "peerDependencies": {
     "tslint": ">=5.0.0",
