@@ -41,7 +41,7 @@
     "@types/fs-extra": "8.0.0",
     "@types/glob": "5.0.36",
     "@types/lodash": "4.14.136",
-    "@types/node": "10.14.12",
+    "@types/node": "10.14.13",
     "bm-tslint-rules": "github:bettermarks/bm-tslint-rules#v0.7.27",
     "ts-node": "7.0.1",
     "typescript": "3.3.4000"
